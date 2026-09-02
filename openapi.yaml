@@ -1,0 +1,279 @@
+openapi: 3.1.0
+info:
+  title: OPass Push Gateway API
+  version: 1.0.0
+  description: |
+    CCIP-Admin-Bueno 瀏覽器端用來發送公開活動推播的中央 API。
+
+    Gateway 從 bearer key 取得永久 EVENT_ID；呼叫端不得指定 EVENT_ID
+    或完整 FCM topic。公告不屬於這個 API。
+
+    Admin 由活動方 reverse proxy Basic Auth 保護，Gateway key 由受保護且
+    不快取的 runtime config 提供給已授權的活動主辦方人員。Gateway 對 CORS
+    preflight 只允許登記的 Admin origins、Authorization 與 Content-Type；
+    實際 POST 還會確認 Origin 屬於該 key。
+servers:
+  - url: https://push.opass.app
+    description: Production（預定）
+tags:
+  - name: Messages
+paths:
+  /v1/messages:
+    post:
+      tags:
+        - Messages
+      operationId: sendMessage
+      summary: 發送一則活動範圍的公開推播
+      description: |
+        Gateway 對每個 role 與三個推播語系各發送一則 FCM topic message。
+        只有所有 message 都被 FCM 接受時才回傳 200。
+
+        FCM 接受不代表裝置已送達或使用者已開啟。呼叫端不得在逾時或結果不明時
+        自動重送。
+
+        Gateway 會在開始發送前驗證每則產生的 topic message 均未超過 FCM 的
+        2,048-byte payload 上限，避免部分語系已送出後才失敗。
+      security:
+        - EventKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendMessageRequest'
+            examples:
+              allCurrentRoles:
+                summary: Admin 已將「全體」展開成具體角色
+                value:
+                  roles:
+                    - audience
+                    - staff
+                  contents:
+                    en: Lunch is ready.
+                    zh-Hant: 午餐已經準備好了。
+                    zh-Hans: 午餐已经准备好了。
+                  uri: https://sitcon.org/
+      responses:
+        '200':
+          description: 所有 topic message 均已被 FCM 接受
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AcceptedResponse'
+        '400':
+          description: request 格式、內容或產生的 FCM payload 大小不合法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Gateway key 缺少、無效或已撤銷
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: request origin 不屬於此 Gateway key 允許的 Admin origins
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: 此活動的發送頻率超過限制
+          headers:
+            Retry-After:
+              description: 可再次嘗試前的秒數
+              schema:
+                type: integer
+                minimum: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Gateway 設定錯誤或未預期的內部錯誤
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: OAuth token endpoint 或 FCM 拒絕全部或部分 topic message
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FcmFailureResponse'
+components:
+  securitySchemes:
+    EventKey:
+      type: http
+      scheme: bearer
+      bearerFormat: OPass event Gateway key
+      description: |
+        由 OPass 開發團隊發給單一活動的 key，透過受 Basic Auth 保護的 Admin
+        runtime config 提供給已授權的活動主辦方人員。Gateway 以驗證結果決定
+        EVENT_ID。
+  schemas:
+    EventId:
+      type: string
+      pattern: '^[A-Za-z0-9_-]{1,64}$'
+      examples:
+        - SITCON_2027
+    Role:
+      type: string
+      pattern: '^[A-Za-z0-9_-]{1,64}$'
+      not:
+        const: all
+      examples:
+        - audience
+    PushLocale:
+      type: string
+      enum:
+        - en
+        - zh-Hant
+        - zh-Hans
+    MessageBody:
+      type: string
+      minLength: 1
+      maxLength: 1024
+      description: |
+        OpenAPI 長度以字元計算；Gateway 還會以實際產生的 UTF-8 payload 驗證
+        FCM topic message 的 2,048-byte 上限。
+    SendMessageRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - roles
+        - contents
+      properties:
+        roles:
+          type: array
+          description: |
+            具體角色清單。Admin 必須依 CCIP-Server 既有的 roles API 結果展開
+            「全體」；不接受 `all` 這個虛擬角色。
+          minItems: 1
+          maxItems: 8
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/Role'
+        contents:
+          type: object
+          additionalProperties: false
+          required:
+            - en
+            - zh-Hant
+            - zh-Hans
+          properties:
+            en:
+              $ref: '#/components/schemas/MessageBody'
+            zh-Hant:
+              $ref: '#/components/schemas/MessageBody'
+            zh-Hans:
+              $ref: '#/components/schemas/MessageBody'
+        uri:
+          type: string
+          format: uri
+          pattern: '^https://'
+          maxLength: 2048
+          description: 選填；App 在使用者點擊通知時開啟的 HTTPS URI。
+    AcceptedResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - push_id
+        - event_id
+        - status
+        - dispatches
+      properties:
+        push_id:
+          type: string
+          format: uuid
+          description: 作為同一操作所有 FCM message 的 Analytics label。
+        event_id:
+          $ref: '#/components/schemas/EventId'
+        status:
+          const: accepted
+        dispatches:
+          type: array
+          minItems: 3
+          maxItems: 24
+          items:
+            $ref: '#/components/schemas/AcceptedDispatch'
+    AcceptedDispatch:
+      type: object
+      additionalProperties: false
+      required:
+        - role
+        - locale
+        - topic
+        - fcm_message_id
+      properties:
+        role:
+          $ref: '#/components/schemas/Role'
+        locale:
+          $ref: '#/components/schemas/PushLocale'
+        topic:
+          type: string
+          pattern: '^[A-Za-z0-9-_.~%]{1,900}$'
+          examples:
+            - opass-v1.SITCON_2027.audience.zh-Hant
+        fcm_message_id:
+          type: string
+          description: FCM 接受 message 後回傳的 resource name。
+          examples:
+            - projects/opass/messages/0:1234567890%abcdef
+    FcmFailureResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - push_id
+        - event_id
+        - status
+        - accepted
+        - failed
+      properties:
+        push_id:
+          type: string
+          format: uuid
+        event_id:
+          $ref: '#/components/schemas/EventId'
+        status:
+          const: fcm_failure
+        accepted:
+          type: array
+          items:
+            $ref: '#/components/schemas/AcceptedDispatch'
+        failed:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/FailedDispatch'
+    FailedDispatch:
+      type: object
+      additionalProperties: false
+      required:
+        - role
+        - locale
+        - topic
+        - code
+      properties:
+        role:
+          $ref: '#/components/schemas/Role'
+        locale:
+          $ref: '#/components/schemas/PushLocale'
+        topic:
+          type: string
+          pattern: '^[A-Za-z0-9-_.~%]{1,900}$'
+        code:
+          type: string
+          description: Gateway 正規化後的 FCM error code。
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+        message:
+          type: string
