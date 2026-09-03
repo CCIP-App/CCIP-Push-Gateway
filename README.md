@@ -22,6 +22,7 @@ CCIP-Admin-Bueno -> OPass Push Gateway -> FCM topic
 - Gateway key 只放在受保護且不快取的 Admin runtime config，不提交到公開 repository。
 - Firebase service account 只存在於中央 Gateway 的 Cloudflare secret。
 - 所有推播內容都是公開資訊；topic 不是機密資料的授權邊界。
+- Android 與 iOS 對每個已登入活動各維持一個 topic；切換目前活動不會取消其他活動的訂閱。
 
 ## Repository 職責
 

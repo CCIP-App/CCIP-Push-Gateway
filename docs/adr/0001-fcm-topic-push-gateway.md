@@ -19,7 +19,7 @@ OPass 是共用 App 與平台；各活動主辦單位自行架設、維運一套
 | --- | --- |
 | CCIP-Admin-Bueno | 由活動方 Basic Auth 保護；持有活動 Gateway key，透過 CCIP-Server 既有的 `GET roles` 取得具體角色，將「全體」展開後直接呼叫 Gateway |
 | Gateway | 驗證 key、由 key 取得 `EVENT_ID`、建構 topic、呼叫 FCM 並回報 FCM 是否接受 |
-| CCIP-Android、CCIP-iOS | 登入成功後訂閱一個活動／角色／推播語系 topic；處理通知顯示、點擊與 Analytics |
+| CCIP-Android、CCIP-iOS | 對每個已登入活動訂閱一個角色／推播語系 topic；處理通知顯示、點擊與 Analytics |
 
 CCIP-Server 只提供既有的活動角色資料，不取得 Gateway key、不新增推播 endpoint，也不參與推播發送。每套 Admin 部署對應一個永久且唯一的 `EVENT_ID`，但 Gateway request 不接受呼叫端提供 `event_id` 或完整 topic；活動一律由驗證成功的 key 決定，避免主辦單位越權發送。
 
@@ -43,9 +43,10 @@ opass-v1.SITCON_2027.audience.zh-Hant
 - `PUSH_LOCALE` 只有 `en`、`zh-Hant`、`zh-Hans`。
 - App locale 為 `zh-Hant`、`zh-Hans` 或其延伸標籤時，分別使用 `zh-Hant`、`zh-Hans`；`nan-Hant-*` 與 `nan-Latn-*` 使用 `zh-Hant`。其他語系使用 `en`。App 選擇 `x-default` 時，先解析目前的系統 locale。
 - 不建立 `.all` topic。Admin 透過 CCIP-Server 既有的 `GET roles` 取得可選角色；選擇「全體」時由 Admin 展開並傳送完整 `roles[]`。Gateway 對每個 role 與 locale 各送一次 FCM topic message。
-- App 只有在登入成功後才訂閱，且任一時間最多保留一個 OPass topic，對應目前的活動、角色與推播語系。Android 目前沒有登出功能；再次成功登入不同身分時，新身分取代舊身分。成功登入新身分、切換活動、改變推播語系或 App 啟動時，都必須重新比對並同步訂閱狀態；重複執行不得產生額外訂閱。
-- App 以整個 App 共用的本機狀態保存目前 topic，不依活動分開保存。目標 topic 改變時，先取消舊 topic，再訂閱新 topic；只有新訂閱成功後才更新本機狀態，失敗則保留足供下次啟動重試的狀態。這個順序優先避免重複通知；推播僅作提醒，因此可接受切換期間短暫漏收。
-- 目前活動沒有有效登入資料時，目標 topic 為空，並移除既有 OPass topic。
+- App 只有在活動登入成功後才訂閱。每個 App 安裝實例可同時訂閱多個活動，但同一個 `EVENT_ID` 最多保留一個 OPass topic，對應該活動目前的角色與推播語系。切換目前顯示的活動不會取消其他已登入活動的訂閱。
+- 再次成功登入同一活動的不同身分時，新身分只取代該活動的舊身分。Android 目前沒有登出功能；iOS 登出時只移除該活動的訂閱。成功登入、登出、改變推播語系、FCM registration 更新或 App 啟動時，都必須重新比對並同步所有已登入活動；重複執行不得產生同一活動的額外訂閱。
+- App 在該安裝的本機狀態中儲存 `EVENT_ID` 到目前 topic 的對應，不得跟著跨裝置同步。替換某活動的 topic 時，先取消該活動的舊 topic，再訂閱新 topic；只有新訂閱成功後才更新本機狀態，失敗則保留足供下次啟動重試的狀態。這個順序優先避免同一活動的重複通知；推播僅作提醒，因此可接受切換期間短暫漏收。
+- 某活動沒有有效登入資料時，只移除該活動既有的 OPass topic，不影響其他活動。
 - topic 名稱不是授權機制。因推播保證是公開資訊，使用者自行得知或訂閱其他 topic 不構成資料外洩；發布權限仍由 Gateway key 控制。
 
 每個 request 最多接受 8 個角色。三個語系、每個可重試錯誤最多重試一次時，最多需要 48 次 FCM subrequest；再加上一次 OAuth access token request，共 49 次。Cloudflare Workers Free 每次 invocation 最多允許 50 個 subrequest，只剩一次餘裕。這是部署方案限制，不是產品需求；開發初期可使用 Free，正式運作若仍需要完整的 8 個角色、重試空間或其他外部 subrequest，應改用 Workers Paid。
@@ -68,11 +69,11 @@ Cloudflare Workers 每次 invocation 最多可同時等待 6 個外部連線，�
 }
 ```
 
-Gateway 以固定的 `OPass` 作為通知標題、`contents` 作為通知本文，發送可由作業系統在背景直接顯示的 FCM notification message，不使用依賴 App 背景執行的 data-only message。每則 message 的 data 都包含同一次操作的 `push_id`；request 提供 `uri` 時一併包含，且所有 value 都是字串。
+Gateway 以固定的 `OPass` 作為通知標題、`contents` 作為通知本文，發送可由作業系統在背景直接顯示的 FCM notification message，不使用依賴 App 背景執行的 data-only message。每則 message 的 data 都包含由 Gateway key 取得的 `event_id` 與同一次操作的 `push_id`；request 提供 `uri` 時一併包含，且所有 value 都是字串。
 
 Android 使用 FCM normal priority；App 建立固定 ID 為 `announcements`、`IMPORTANCE_DEFAULT` 且使用預設提示音的 notification channel。Apple 平台使用 `apns-priority: 5` 與預設提示音。兩個平台都不由 Gateway 設定或累加 badge。
 
-App 以 `push_id` 判斷是否由推播通知啟動。有 HTTPS `uri` 時開啟該 URI；沒有 `uri` 時進入目前活動的公告頁。request 不包含公告 ID；Gateway 不讀寫公告。
+App 以 `push_id` 判斷是否由推播通知啟動。有 HTTPS `uri` 時開啟該 URI；沒有 `uri` 時依 `event_id` 進入發送活動的公告頁，即使該活動並非目前顯示的活動。Admin request 不包含 `event_id` 或公告 ID；Gateway 不讀寫公告。
 
 FCM topic message 的 payload 上限為 2,048 bytes，包括 key 與 value。OpenAPI 的 `maxLength` 計算字元而非 UTF-8 bytes，因此 Gateway 必須先建構所有 FCM message，確認每則序列化後的 payload 均未超過上限，再開始發送；任一則超過上限即回傳 `400`，避免部分送出。
 

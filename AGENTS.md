@@ -37,7 +37,7 @@ When the first implementation is added, update this file with the actual install
 - Admin expands the UI choice "all" from that role list into concrete `roles[]`; neither the Gateway nor FCM has an `.all` topic.
 - Each event Gateway key is bound centrally to exactly one permanent and unique `EVENT_ID`. The Gateway derives the event from the authenticated key.
 - A send request must never accept a caller-supplied `event_id`, complete topic, device token, or Firebase Installation ID.
-- Topic names follow the ADR. Each App instance has at most one active OPass topic subscription. Apps subscribe only after a successful login. A later successful login replaces the prior identity; Apps also reconcile after event changes, push-locale changes, and startup.
+- Topic names follow the ADR. Each App instance has at most one active OPass topic subscription per logged-in event and may remain subscribed to multiple events. Apps subscribe only after a successful login. A later successful login replaces the prior identity only for that event; switching the currently viewed event must not remove other event subscriptions. Apps reconcile after login or logout, push-locale changes, FCM registration changes, and startup.
 - Push content is always public information. Do not extend this design to private, personalized, or transactional messages.
 - Announcements and push delivery are independent operations. Do not require an announcement ID or make either operation create the other.
 - Support only new App versions using this contract. Do not add OneSignal compatibility, dual delivery, or migration behavior.
@@ -59,7 +59,7 @@ When the first implementation is added, update this file with the actual install
 - Implement the request and response shapes exactly as specified in `openapi.yaml`.
 - Preserve the three push locales: `en`, `zh-Hant`, and `zh-Hans`. Both `nan-Hant-*` and `nan-Latn-*` map to `zh-Hant`; other non-Chinese App languages fall back to `en` as defined by the ADR.
 - Send one FCM topic message for each role-locale pair. Do not change the role limit, retry count, or fanout strategy independently; together they keep one invocation within the documented Workers subrequest budget. Keep at most six outgoing FCM requests in flight at once.
-- Use FCM notification messages, not data-only notifications. Include `push_id` and the optional HTTPS `uri` in FCM data so Apps can route notification clicks. Preserve the normal delivery priority, default sound, no-badge behavior, and Android `announcements` channel contract from the ADR.
+- Use FCM notification messages, not data-only notifications. Include the key-derived `event_id`, `push_id`, and the optional HTTPS `uri` in FCM data so Apps can route notification clicks, including notifications from an event that is not currently open. Preserve the normal delivery priority, default sound, no-badge behavior, and Android `announcements` channel contract from the ADR.
 - Validate every generated FCM topic payload against the 2,048-byte UTF-8 limit before sending any message. OpenAPI character limits alone are insufficient.
 - Retry only documented transient upstream failures and at most as specified by the ADR. Do not retry validation or authorization failures.
 - An FCM message ID means FCM accepted the message, not that a device received or opened it. Keep these states distinct in code, logs, UI text, and tests.
