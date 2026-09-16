@@ -11,7 +11,7 @@ Keep this file concise and durable. Put rationale in an ADR, wire-level details 
 Before changing anything:
 
 1. Read `README.md` for the repository scope.
-2. Read the accepted ADRs relevant to the task under `docs/adr/`. ADR 0001 is foundational and must be read before changing authentication, event isolation, topic routing, credentials, delivery semantics, or observability.
+2. Read the ADRs relevant to the task under `docs/adr/`. ADR 0001 is foundational and must be read before changing authentication, event isolation, topic routing, credentials, delivery semantics, or observability.
 3. Read `openapi.yaml` before changing any HTTP behavior.
 4. Inspect the working tree and preserve unrelated or uncommitted user changes.
 
@@ -37,10 +37,11 @@ When the first implementation is added, update this file with the actual install
 - Admin expands the UI choice "all" from that role list into concrete `roles[]`; neither the Gateway nor FCM has an `.all` topic.
 - Each event Gateway key is bound centrally to exactly one permanent and unique `EVENT_ID`. The Gateway derives the event from the authenticated key.
 - A send request must never accept a caller-supplied `event_id`, complete topic, device token, or Firebase Installation ID.
-- Topic names follow the ADR. Each App instance has at most one active OPass topic subscription per logged-in event and may remain subscribed to multiple events. Apps subscribe only after a successful login. A later successful login replaces the prior identity only for that event; switching the currently viewed event must not remove other event subscriptions. Apps reconcile after login or logout, push-locale changes, FCM registration changes, and startup.
+- Topic names follow the ADRs. Each App instance has at most one active OPass topic subscription per logged-in event and may remain subscribed to multiple events. Synced or restored credentials must be validated before adding subscriptions. A later successful login replaces the prior identity only for that event; switching the currently viewed event must not remove other event subscriptions. Reconcile on login, logout, role changes, confirmed credential invalidation, push-locale changes, FCM registration changes, and startup. Keep recoverable pending transitions local to the installation; do not sync or restore applied-subscription state or treat transient validation failures as logout.
+- Apply validation results only to the captured event and still-current identity revision. Stale success or failure must not overwrite roles, clear newer credentials, or trigger subscriptions; serializing SDK operations alone is insufficient.
 - Push content is always public information. Do not extend this design to private, personalized, or transactional messages.
 - Announcements and push delivery are independent operations. Do not require an announcement ID or make either operation create the other.
-- Support only new App versions using this contract. Do not add OneSignal compatibility, dual delivery, or migration behavior.
+- Support only new App versions using this contract. Do not add OneSignal compatibility, dual delivery, migration behavior, or UnifiedPush in this version.
 - FCM performs topic fanout. Do not build a central device registry or send one Gateway request per attendee.
 
 ## Security and credentials
@@ -50,6 +51,7 @@ When the first implementation is added, update this file with the actual install
 - An event Gateway key is intentionally readable by every organizer who can pass that deployment's reverse-proxy Basic Auth. Treat those users as authorized publishers for that event.
 - Load the event key through a Basic-Auth-protected, non-cacheable Admin runtime configuration. Never commit a real key or place it in an unprotected asset.
 - Store only a strong key digest in the Gateway mapping, together with its `EVENT_ID`, allowed Admin origins, and lifecycle state. Support revocation and overlapping rotation.
+- Maintain organizer identity and the event end time centrally per event. Stop new dispatches 30 days after the event ends; key rotation must not extend this deadline. Admin must verify its event against the authenticated Gateway context before sending.
 - CORS limits browser access but is not authentication. Preflight must use the registered global origin allowlist; the actual request must validate both the bearer key and that key's allowed origin.
 - Validate all trust-boundary input, apply per-event rate limits, and keep audit logs free of bearer keys and Firebase private-key material.
 - Never send a live notification, deploy a Worker, change Cloudflare or Firebase configuration, issue or rotate a key, or publish externally without explicit user authorization.
@@ -60,10 +62,11 @@ When the first implementation is added, update this file with the actual install
 - Require English (`en`) and Traditional Chinese (`zh-Hant`) content; these are the currently enabled push locales. Chinese App locales (`zh` and its extensions), `nan-Hant-*`, and `nan-Latn-*` map to `zh-Hant`; all other App languages fall back to `en` as defined by the ADR. Keep App interface translations separate from push locales.
 - Send one FCM topic message for each role-locale pair. Do not change the role limit, retry count, or fanout strategy independently; together they keep one invocation within the documented Workers subrequest budget. Keep at most six outgoing FCM requests in flight at once.
 - Use FCM notification messages, not data-only notifications. Include the key-derived `event_id`, `push_id`, and the optional HTTPS `uri` in FCM data so Apps can route notification clicks, including notifications from an event that is not currently open. Preserve the normal delivery priority, default sound, no-badge behavior, and Android `announcements` channel contract from the ADR.
+- Use the centrally registered organizer name as the notification title. All dispatches and bounded retries in one operation share a fixed one-hour expiry. Set Android TTL and APNs expiration explicitly, and `aps.mutable-content: 1` for the minimal FCM delivery-metrics extension retained on iOS after removing OneSignal.
 - Validate every generated FCM topic payload against the 2,048-byte UTF-8 limit before sending any message. OpenAPI character limits alone are insufficient.
-- Retry only documented transient upstream failures and at most as specified by the ADR. Do not retry validation or authorization failures.
+- Retry only explicit documented transient upstream failures and at most as specified by the ADR. Do not retry validation or authorization failures, unknown transport outcomes, or partial operations. Accept missed notifications; do not add push-operation resend or recovery workflows.
 - An FCM message ID means FCM accepted the message, not that a device received or opened it. Keep these states distinct in code, logs, UI text, and tests.
-- Reuse one `push_id` as the Analytics label for all role-locale messages in one operation. Only the platform-available aggregate delivery and open trends defined by the ADR are required; do not promise symmetric or per-device reporting.
+- Reuse one `push_id` as the Analytics label for all role-locale messages in one operation. Require only platform-available aggregate delivery/open counts and event-scoped CSV handoff through native Firebase/Analytics/BigQuery exports. Preserve the content mapping until CSV handoff and verify that exported metrics can be matched to notification content as required by ADR 0001. Label units, coverage, and cutoff times; unavailable is not zero and counts are not unique people. Do not add conversion tracking, a reporting backend, or indefinite central retention for next-year analysis.
 
 ## Implementation discipline
 
@@ -81,6 +84,7 @@ Before reporting an implementation change complete:
 - Run every repository-provided formatter, linter, type check, and test relevant to the changed files.
 - Validate `openapi.yaml` syntax and local `$ref` targets after contract edits.
 - Cover invalid and revoked keys, cross-event isolation, rejection of `all` and caller-supplied routing targets, role and locale validation, CORS behavior, multi-byte payload limits, bounded retries, and secret redaction where relevant.
+- Also cover fixed expiry, event cutoff and rotation, context mismatches, honest unknown/not-attempted results, and the subscription-recovery and event-scoped CSV cases in ADR 0001 where relevant.
 - Use mocks or FCM `validate_only` for automated checks. A test must not deliver a real notification.
 - Review the final diff and report any validation that could not be run.
 
@@ -89,7 +93,7 @@ Before reporting an implementation change complete:
 - Write this agent-facing `AGENTS.md` in English.
 - Write `README.md`, ADRs, and other human-facing documentation in Traditional Chinese using natural Taiwan terminology.
 - Keep code identifiers and protocol field names in English. OpenAPI descriptions and examples may use Traditional Chinese when that improves maintainer comprehension.
-- Record a changed architecture or governance decision by adding or superseding an ADR; do not rewrite decision history without explanation.
+- Refine proposed ADRs in place. Record changes to accepted architecture or governance decisions in a new or superseding ADR; do not silently rewrite decision history.
 
 ## Change authority
 

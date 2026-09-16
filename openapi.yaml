@@ -6,19 +6,95 @@ info:
     CCIP-Admin-Bueno 瀏覽器端用來發送公開活動推播的中央 API。
 
     Gateway 從 bearer key 取得永久 EVENT_ID；呼叫端不得指定 EVENT_ID
-    或完整 FCM topic。公告不屬於這個 API。
+    或完整 FCM topic。公告、Analytics 查詢與 CSV 匯出不屬於這個 API。
+    生命週期與報表範圍見 ADR 0001。
 
     Admin 由活動方 reverse proxy Basic Auth 保護，Gateway key 由受保護且
     不快取的 runtime config 提供給已授權的活動主辦方人員。Gateway 對 CORS
-    preflight 只允許登記的 Admin origins、Authorization 與 Content-Type；
-    實際 POST 還會確認 Origin 屬於該 key。
+    preflight 不驗證 bearer key，只允許全域登記的 Admin origins、該路徑的方法
+    及 Authorization、Content-Type（header 名稱比對不分大小寫）。
+    實際 GET／POST 必須驗證 key 及其允許的 Origin；缺少 Origin 亦拒絕。
+
+    允許來源的回應回傳精確的 Access-Control-Allow-Origin，不使用 *，並帶
+    Vary: Origin；preflight 另依 Access-Control-Request-Method、
+    Access-Control-Request-Headers 區分快取，回傳 Access-Control-Allow-Headers:
+    Authorization, Content-Type。實際回應帶 Access-Control-Expose-Headers: Retry-After。
+    驗證 key 前的錯誤只對全域允許的 origin 回傳 CORS headers；取得有效 key
+    後則只對該 key 允許的 origin 回傳。錯誤回應也適用，不讓 Admin 只能讀到
+    籠統的 CORS 錯誤。跨活動 origin 仍不得存取內容。
+
+    所有回應使用 Cache-Control: no-store；不使用 cookie 驗證或
+    Access-Control-Allow-Credentials。Admin 的 Basic Auth 不轉送給 Gateway。
 servers:
   - url: https://push.opass.app
     description: Production（預定）
 tags:
+  - name: Context
   - name: Messages
 paths:
+  /v1/context:
+    parameters:
+      - $ref: '#/components/parameters/Origin'
+    options:
+      operationId: preflightContext
+      summary: 檢查 context 查詢的瀏覽器來源
+      description: 只允許全域登記的 origin、GET 與允許的 request headers，不驗證 bearer key。
+      security: []
+      responses:
+        '204':
+          description: 無本文；回傳該 origin、Access-Control-Allow-Methods 為 GET，以及允許的 request headers。
+        '403':
+          description: Origin、要求的方法或 request headers 不允許；不回傳允許存取的 CORS headers。
+    get:
+      tags:
+        - Context
+      operationId: getEventContext
+      summary: 取得目前 key 綁定的活動與發布期限
+      description: |
+        不接受活動選擇參數。Admin 送出前必須核對回傳的 event_id 與目前設定活動；
+        不一致、查詢失敗或 publishing_enabled 為 false 時禁止送出。
+        活動已停發但 key 仍有效時，仍可讀取 context；這不代表取得發送權限。
+        POST 每次獨立驗證 key、origin 與期限，不依賴先前的 GET 結果授權。
+      security:
+        - EventKey: []
+      responses:
+        '200':
+          description: 經 key 與 origin 驗證的中央活動資訊
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventContext'
+        '401':
+          description: Gateway key 缺少、無效或已撤銷
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Origin 缺少或不屬於此 key 的允許清單；code 為 ORIGIN_NOT_ALLOWED。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: 中央活動設定缺少、不合法或無法讀取；不得改用 Admin 本機資料授權發送。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /v1/messages:
+    parameters:
+      - $ref: '#/components/parameters/Origin'
+    options:
+      operationId: preflightMessages
+      summary: 檢查發送推播的瀏覽器來源
+      description: 只允許全域登記的 origin、POST 與允許的 request headers，不驗證 bearer key。
+      security: []
+      responses:
+        '204':
+          description: 無本文；回傳該 origin、Access-Control-Allow-Methods 為 POST，以及允許的 request headers。
+        '403':
+          description: Origin、要求的方法或 request headers 不允許；不回傳允許存取的 CORS headers。
     post:
       tags:
         - Messages
@@ -28,11 +104,24 @@ paths:
         Gateway 對每個 role 的英文與正體中文各發送一則 FCM topic message。
         只有所有 message 都被 FCM 接受時才回傳 200。
 
-        FCM 接受不代表裝置已送達或使用者已開啟。呼叫端不得在逾時或結果不明時
-        自動重送。
+        標題使用中央登記的 organizer_name，不接受呼叫端指定標題或期限。
+        活動結束後 30 × 24 小時停止開始新派送，所有輪替 key 共用期限。
+        每次準備開始 FCM request（含有限重試）時重查停發與訊息期限。
+        停發前已交給 FCM 的訊息不撤回，仍適用自身有效期限。
+
+        同一操作以 Gateway 驗證完成時間建立固定一小時 expires_at；Android TTL
+        使用剩餘秒數，APNs expiration 使用同一 Unix 秒數字串。重試不延長期限，
+        到期不再開始 request，也不移除已顯示通知。APNs 設定 mutable-content: 1
+        以供 iOS 最小 Notification Service Extension 匯出 alert delivery metrics。
+
+        FCM 接受不代表裝置已送達或使用者已開啟。接受漏收，不提供整筆或部分補送。
+        只對明確的 FCM 500／503 回覆最多重試一次；未知傳輸結果不得重試。
+        呼叫端逾時、斷線或無法讀到完整回應時須視為結果未知，不得自動重送或
+        宣稱全部未送出。沒有操作狀態查詢 API。
 
         Gateway 會在開始發送前驗證每則產生的 topic message 均未超過 FCM 的
-        2,048-byte payload 上限，避免部分語系已送出後才失敗。
+        2,048-byte payload 上限（含中央標題及 APNs 設定），避免部分語系已送出後
+        才發現大小不合法。驗證、期限、設定與 rate limit 檢查均在首次派送前完成。
       security:
         - EventKey: []
       requestBody:
@@ -72,11 +161,18 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: request origin 不屬於此 Gateway key 允許的 Admin origins
+          description: |
+            Origin 缺少或不允許（ORIGIN_NOT_ALLOWED），或目前時間已達中央的
+            send_until（EVENT_PUBLISHING_EXPIRED）。尚未開始任何 FCM 派送。
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                publishingExpired:
+                  value:
+                    code: EVENT_PUBLISHING_EXPIRED
+                    message: 活動結束已滿三十天，停止發布推播。
         '429':
           description: 此活動的發送頻率超過限制
           headers:
@@ -90,18 +186,30 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '500':
-          description: Gateway 設定錯誤或未預期的內部錯誤
+          description: |
+            開始派送前的 Gateway 設定錯誤或內部錯誤。派送開始後若仍可回應，
+            回傳 502 與完整結果；若無法取得完整回應，Admin 視為結果未知。
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '502':
-          description: OAuth token endpoint 或 FCM 拒絕全部或部分 topic message
+          description: |
+            未能確認所有項目被 FCM 接受；包含 OAuth 失敗、明確拒絕、傳輸結果
+            未知或派送期間到期。依每個組合的實際狀態回報，不表示全部未送出。
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/FcmFailureResponse'
+                $ref: '#/components/schemas/IncompleteResponse'
 components:
+  parameters:
+    Origin:
+      name: Origin
+      in: header
+      required: true
+      description: 瀏覽器的 Admin origin；實際 GET／POST 必須同時通過 key 綁定的來源驗證。
+      schema:
+        type: string
   securitySchemes:
     EventKey:
       type: http
@@ -112,6 +220,39 @@ components:
         runtime config 提供給已授權的活動主辦方人員。Gateway 以驗證結果決定
         EVENT_ID。
   schemas:
+    EventContext:
+      type: object
+      additionalProperties: false
+      required:
+        - event_id
+        - organizer_name
+        - send_until
+        - publishing_enabled
+      properties:
+        event_id:
+          $ref: '#/components/schemas/EventId'
+        organizer_name:
+          type: string
+          minLength: 1
+          pattern: '\S'
+          not:
+            pattern: '[\u0000-\u001F\u007F-\u009F]'
+          description: 中央登記的活動主辦名稱，也是通知標題；不得為空白或含控制字元。
+          examples:
+            - SITCON
+        send_until:
+          type: string
+          format: date-time
+          description: |
+            含時區的 RFC 3339 時間，等於中央 event_ends_at 加 30 × 24 小時；
+            所有同活動 key 共用，輪替不延長。到達此時間即停止開始新派送。
+          examples:
+            - '2027-04-05T09:00:00Z'
+        publishing_enabled:
+          type: boolean
+          description: |
+            本次查詢時 key 已通過驗證且目前時間早於 send_until。只是目前狀態，
+            不是未來發送保證；POST 仍重新驗證 key、origin 與期限。
     EventId:
       type: string
       pattern: '^[A-Za-z0-9_-]{1,64}$'
@@ -216,15 +357,20 @@ components:
           description: FCM 接受 message 後回傳的 resource name。
           examples:
             - projects/opass/messages/0:1234567890%abcdef
-    FcmFailureResponse:
+    IncompleteResponse:
       type: object
       additionalProperties: false
+      description: |
+        accepted 與 unaccepted 合計必須完整涵蓋 request 的 roles × 英文及正體中文，
+        每個 role-locale 組合恰好出現一次；不因有限重試增加項目。
+        完全未送出（例如 OAuth 失敗）時 accepted 為空，所有項目為 not_attempted。
+        本回應與 push_id 不是可用來補送或查詢進度的憑據。
       required:
         - push_id
         - event_id
         - status
         - accepted
-        - failed
+        - unaccepted
       properties:
         push_id:
           type: string
@@ -232,23 +378,26 @@ components:
         event_id:
           $ref: '#/components/schemas/EventId'
         status:
-          const: fcm_failure
+          const: incomplete
         accepted:
           type: array
+          maxItems: 15
           items:
             $ref: '#/components/schemas/AcceptedDispatch'
-        failed:
+        unaccepted:
           type: array
           minItems: 1
+          maxItems: 16
           items:
-            $ref: '#/components/schemas/FailedDispatch'
-    FailedDispatch:
+            $ref: '#/components/schemas/UnacceptedDispatch'
+    UnacceptedDispatch:
       type: object
       additionalProperties: false
       required:
         - role
         - locale
         - topic
+        - outcome
         - code
       properties:
         role:
@@ -258,9 +407,22 @@ components:
         topic:
           type: string
           pattern: '^[A-Za-z0-9-_.~%]{1,900}$'
+        outcome:
+          type: string
+          enum:
+            - rejected
+            - not_attempted
+            - unknown
+          description: |
+            rejected：已收到 FCM 明確拒絕；not_attempted：尚未向 FCM 嘗試該組合；
+            unknown：已嘗試但缺少可判定的回覆，可能已接受。若重試結果未知，
+            不能用先前的明確拒絕覆蓋它。未再次嘗試不會抹除先前已知結果。
         code:
           type: string
-          description: Gateway 正規化後的 FCM error code。
+          description: |
+            Gateway 正規化的原因。rejected 使用 FCM error code；not_attempted
+            可為 OAUTH_FAILED、EVENT_PUBLISHING_EXPIRED、MESSAGE_EXPIRED 或
+            DISPATCH_ABORTED；unknown 可為 UPSTREAM_OUTCOME_UNKNOWN。
     ErrorResponse:
       type: object
       additionalProperties: false

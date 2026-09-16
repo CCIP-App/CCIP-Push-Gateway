@@ -24,6 +24,15 @@ CCIP-Admin-Bueno -> OPass Push Gateway -> FCM topic
 - 所有推播內容都是公開資訊；topic 不是機密資料的授權邊界。
 - Android 與 iOS 對每個已登入活動各維持一個 topic；切換目前活動不會取消其他活動的訂閱。
 
+## 推播範圍
+
+- 推播有效一小時；活動結束後三十天由 Gateway 停止新派送，輪替 key 不延長期限。
+- 通知標題使用中央登記的活動主辦名稱；Admin 發送前先核對 key 對應的活動與可發布狀態。
+- 接受漏收，不補送部分或未知結果；FCM 已接受、裝置送達與通知點擊是不同狀態。
+- 跨裝置帶入的登入資料須驗證成功後才新增訂閱；訂閱套用狀態不跨裝置同步或從備份沿用。
+- 成效只交付平台可取得的送達數、通知點擊數及 CSV；沿用 Firebase／Analytics／BigQuery，主辦方自行保存，不建立報表後台或追蹤後續轉化。
+- iOS 移除 OneSignal，保留送達統計所需的最小 FCM Notification Service Extension；UnifiedPush 不納入本版。
+
 ## Repository 職責
 
 這裡是 Gateway 行為、topic 命名與 Admin-to-Gateway API 的唯一規格來源。Android、iOS 與 CCIP-Admin-Bueno 依此契約實作，不另行複製規格。
