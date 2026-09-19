@@ -33,6 +33,8 @@ When the first implementation is added, update this file with the actual install
 ## Non-negotiable architecture
 
 - The Gateway is a centrally operated Cloudflare Worker that sends through the FCM HTTP v1 API.
+- Save content and known dispatch results in centrally operated D1 under ADR 0002. Content must be saved before FCM; missing results do not authorize resend. D1 content storage does not change the secret-based event-key mapping.
+- Deployment must not require a valid payment method across compute, content storage, and native metrics handoff. If provider conditions or measured usage cannot meet that constraint, reassess the decision rather than automatically enabling billing or dropping required data.
 - `CCIP-Admin-Bueno` calls the Gateway directly from the browser. It reuses `CCIP-Server`'s existing roles endpoint as the source of the role list, but `CCIP-Server` must not gain a push endpoint or Gateway credential and is not in the push delivery path.
 - Admin expands the UI choice "all" from that role list into concrete `roles[]`; neither the Gateway nor FCM has an `.all` topic.
 - Each event Gateway key is bound centrally to exactly one permanent and unique `EVENT_ID`. The Gateway derives the event from the authenticated key.
@@ -41,7 +43,7 @@ When the first implementation is added, update this file with the actual install
 - Apply validation results only to the captured event and still-current identity revision. Stale success or failure must not overwrite roles, clear newer credentials, or trigger subscriptions; serializing SDK operations alone is insufficient.
 - Push content is always public information. Do not extend this design to private, personalized, or transactional messages.
 - Announcements and push delivery are independent operations. Do not require an announcement ID or make either operation create the other.
-- Support only new App versions using this contract. Do not add OneSignal compatibility, dual delivery, migration behavior, or UnifiedPush in this version.
+- Support only App versions using the Gateway v1 contract. Do not add OneSignal compatibility, dual delivery, migration behavior, or UnifiedPush to Gateway v1.
 - FCM performs topic fanout. Do not build a central device registry or send one Gateway request per attendee.
 
 ## Security and credentials
@@ -93,6 +95,9 @@ Before reporting an implementation change complete:
 - Write this agent-facing `AGENTS.md` in English.
 - Write `README.md`, ADRs, and other human-facing documentation in Traditional Chinese using natural Taiwan terminology.
 - Keep code identifiers and protocol field names in English. OpenAPI descriptions and examples may use Traditional Chinese when that improves maintainer comprehension.
+- Write project documentation for readers without the conversation history: state behavior, scope, ownership, and prerequisites directly. Keep task progress and session-relative wording out of durable guides; attach validation results to an identified revision in commit, PR, or release records.
+- Keep decision status, implementation status, and deployment evidence separate. Do not mark an ADR accepted or an integration verified solely because code exists.
+- Before implementing an architectural decision, reconcile the relevant ADR status with established decisions and implementation authorization. Record the adopted scope and date before dependent implementation commits, and identify any unresolved product or governance choices and when they must be resolved. Do not ask the user to repeat decisions already made.
 - Refine proposed ADRs in place. Record changes to accepted architecture or governance decisions in a new or superseding ADR; do not silently rewrite decision history.
 
 ## Change authority

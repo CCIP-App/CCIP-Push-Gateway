@@ -1,7 +1,10 @@
 # ADR 0001：以中央 Gateway 發送活動範圍的 FCM topic 推播
 
-- 狀態：提案中
+- 狀態：已採用
 - 提案日期：2026-09-01
+- 採納日期：2026-09-16
+- 適用契約：Gateway API v1 與 `opass-v1` topic
+- 相關決策：[ADR 0002：以 D1 保存推播內容對照](0002-content-export-storage.md)
 
 ## 背景
 
@@ -13,9 +16,9 @@ OPass 是共用 App 與平台；各活動主辦單位自行架設、維運一套
 
 ## 決策
 
-### 1. 服務拓撲與責任
+### 1. 服務拓樸與責任
 
-新增獨立的中央 OPass Push Gateway repository，部署為 Cloudflare Worker，透過 FCM HTTP v1 API 發送 topic message。
+中央 OPass Push Gateway 使用獨立 repository，部署為 Cloudflare Worker，透過 FCM HTTP v1 API 發送 topic message。
 
 | 元件 | 責任 |
 | --- | --- |
@@ -46,16 +49,16 @@ opass-v1.SITCON_2027.audience.zh-Hant
 - App 介面語言與推播語系分開處理。App locale 為 `zh` 或其延伸標籤時，使用 `zh-Hant`，正體與簡體介面共用正體中文推播內容；`nan-Hant-*` 與 `nan-Latn-*` 使用 `zh-Hant`。其他語系使用 `en`。App 選擇 `x-default` 時，先解析目前的系統 locale。App 介面保留既有翻譯與語言選項。
 - 不建立 `.all` topic。Admin 透過 CCIP-Server 既有的 `GET roles` 取得可選角色；選擇「全體」時由 Admin 展開並傳送完整 `roles[]`。Gateway 對每個 role 與 locale 各送一次 FCM topic message。
 - App 只有在活動登入成功後才訂閱。跨裝置同步、備份還原或 Keychain 中出現 token，不等於在本安裝登入成功；須先向對應活動服務驗證成功並確認活動與角色。每個 App 安裝實例可同時訂閱多個活動，但同一個 `EVENT_ID` 最多保留一個 OPass topic，對應該活動目前的角色與推播語系。切換目前顯示的活動不會取消其他已登入活動的訂閱。
-- 再次成功登入同一活動的不同身分時，新身分只取代該活動的舊身分。Android 目前沒有登出功能；iOS 登出時只移除該活動的訂閱。成功登入、重新載入參與者資料造成角色變更、明確失效的登入資料清理、登出、推播語系變更、FCM registration 更新及 App 啟動時，都必須重新比對並同步所有已登入活動，不只目前畫面上的活動。
+- 再次成功登入同一活動的不同身分時，新身分只取代該活動的舊身分。App 提供登出操作時，只移除該活動的訂閱；此契約不要求新增登出 UI。成功登入、重新載入參與者資料造成角色變更、明確失效的登入資料清理、登出、推播語系變更、FCM registration 更新及 App 啟動時，都必須重新比對並同步所有已登入活動，不只目前畫面上的活動。
 - 驗證請求須綁定發起時的 `EVENT_ID` 與登入身分版本；套用成功或失敗結果前，確認該活動的身分仍未被登出、重新登入或同步帶入的新 token 取代。過期回應不得覆蓋角色、清除新憑證或觸發訂閱；資料寫入與清理以請求所屬活動為準，不以回應時目前開啟的活動決定。這項檢查與狀態更新須連續完成，不能只靠序列化後續 SDK 操作避免舊結果覆蓋新身分。
 - App 依活動分開保存「已驗證登入身分／角色」與「本安裝的訂閱套用狀態」。同一活動的 SDK 訂閱操作須序列化，先取消舊 topic，再訂閱新 topic。發起 SDK 操作前就持久化待完成轉換，包含可能已訂閱、但尚未確認寫入本機的目標 topic；不能只保存最後一次成功的 topic。重新啟動或身分再次改變時，先清理可能殘留的 topic，再收斂到目前已驗證的目標，避免 SDK 成功、本機寫入前中斷後留下兩個角色訂閱。使用本機狀態與既有 SDK 重試，不新增中央裝置資料庫；切換期間短暫漏收可接受。
 - 訂閱套用狀態與待完成轉換只屬於該安裝，不跨裝置同步或從備份沿用；新安裝不能拿還原的「已訂閱」標記跳過訂閱。
 - 某活動明確登出或登入憑證確認失效時，只移除該活動既有的 OPass topic。離線、伺服器暫時失敗或本機憑證讀取失敗，不得當成登出、角色撤銷或清空所有訂閱；保留既有已驗證狀態，待下次驗證。失敗 HTTP 狀態須按活動服務的實際語意判斷，不能將所有 `403` 都當成 token 失效。
 - topic 名稱不是授權機制。因推播保證是公開資訊，使用者自行得知或訂閱其他 topic 不構成資料外洩；發布權限仍由 Gateway key 控制。
 
-每個 request 最多接受 8 個角色。兩個語系、每個可重試錯誤最多重試一次時，最多需要 32 次 FCM subrequest；再加上一次 OAuth access token request，共 33 次。Cloudflare Workers Free 每次 invocation 最多允許 50 個 subrequest，尚有 17 次餘裕。這是部署方案限制，不是產品需求；開發初期可使用 Free，正式運作若其他外部 subrequest 超出此上限，應改用 Workers Paid。
+每個 request 最多接受 8 個角色。兩個語系、每個可重試錯誤最多重試一次時，最多需要 32 次 FCM subrequest；再加上一次 OAuth access token request，共 33 次外部請求。角色數與重試次數須共同核算，不能獨立放寬。內容保存、失敗語意及部署約束由 [ADR 0002](0002-content-export-storage.md) 補充；平台用量與限制另於部署前核對。
 
-Cloudflare Workers 每次 invocation 最多可同時等待 6 個外部連線，因此 Gateway 同時最多發送 6 個 FCM request；不可一次並行送出全部 role-locale 組合。這只限制 Gateway 的呼叫方式，不改變 API 契約或 FCM fanout 結果。
+Cloudflare Workers 對同時等待 response headers 的連線設有六個上限，因此 Gateway 同時最多發送六個 FCM request；不可一次並行送出全部 role-locale 組合。這只限制 Gateway 的呼叫方式，不改變 API 契約或 FCM fanout 結果。平台限制的核對來源見 [Workers limits](https://developers.cloudflare.com/workers/platform/limits/#simultaneous-open-connections)。
 
 ### 3. API 與發送語意
 
@@ -94,7 +97,7 @@ Gateway 僅對 FCM 明列為暫時性錯誤的 `INTERNAL`（500）與 `UNAVAILAB
 
 若無法確認所有 role-locale 組合都已接受，回傳 `incomplete`，將未確認接受的項目區分為 `rejected`（收到明確拒絕）、`not_attempted`（尚未送往 FCM）及 `unknown`（已嘗試，但未取得可判定結果）。OAuth 失敗時，尚未派送的項目是未嘗試，不能假裝成 FCM 拒絕訊息。每個組合恰好出現在接受或未確認接受清單一次，不重複計入有限重試。
 
-Gateway 不提供 exactly-once 或完整送達保證，不重試傳輸結果未知的請求，也不重送整筆操作。若整個 HTTP 回應遺失，Admin 只顯示「結果未知，可能已有部分送出」，不可宣稱全部失敗或安全重送。本版接受漏收，不增加部分補送、狀態查詢、人工恢復、佇列或 idempotency store；介面不得提供以失敗項目重送的功能。
+Gateway 不提供 exactly-once 或完整送達保證，不重試傳輸結果未知的請求，也不重送整筆操作。若整個 HTTP 回應遺失，Admin 只顯示「結果未知，可能已有部分送出」，不可宣稱全部失敗或安全重送。Gateway v1 接受漏收，不提供部分補送、狀態查詢、人工恢復、佇列或 idempotency store；介面不得提供以失敗項目重送的功能。
 
 ### 4. 憑證與治理
 
@@ -107,7 +110,7 @@ Firebase service account JSON 只存於 Cloudflare Worker secret。Gateway 以�
 3. 所有能進入 Admin 的活動主辦方人員都被視為有權讀取並使用 key；這是接受的治理邊界。key 不得進入公開 repository、未受保護的靜態檔、App 或 log。
 4. 輪替時可短暫讓同一 `EVENT_ID` 有兩個有效 digest；確認新 key 生效後撤銷舊 key。
 
-初期以單一 JSON secret 保存少量 digest-to-event 對應。接近 Cloudflare 單一變數大小限制，或需要多人同時管理、稽核與立即撤銷時，再改用 D1；不預先建立管理後台或 key-management API。
+Gateway v1 以單一 JSON secret 保存少量 digest-to-event 對應。接近 Cloudflare 單一變數大小限制，或需要多人同時管理、稽核與立即撤銷時，再以 ADR 評估替代保存方式；不預先建立管理後台或 key-management API。ADR 0002 的 D1 僅保存推播內容與已知派送結果，不改變此處的 key 對應保存方式。
 
 Admin 以 `Authorization: Bearer <Gateway key>` 直接呼叫 Gateway。Gateway 的 preflight 只允許全域登記的 Admin origin，明列 `Authorization` 與 `Content-Type`，不得使用 `*`；實際 GET／POST 還須確認 `Origin` 屬於該 key。允許瀏覽器讀取的回應須包含對應 origin 的 CORS headers，並 expose `Retry-After`；完整規則見 OpenAPI。CORS 只限制瀏覽器，不能取代 bearer key 驗證；活動 key 若外洩，仍須以撤銷、輪替、rate limit 與 audit log 控制濫用。
 
@@ -138,7 +141,7 @@ Admin 先以同一把 key 呼叫 `GET /v1/context`，取得 key 實際綁定的�
 
 `Received` 與 `Impressions` 僅適用 Android；Firebase Console 報表可能因批次處理延遲最多 24 小時，BigQuery 匯入也有自己的批次延遲。數字須標示實際計數單位、來源、平台、資料涵蓋限制與統計截止時間；訊息次數或 App 安裝實例數都不得標成不重複的自然人人數。未啟用、尚未匯入、不支援或不足以提供的資料標為「無資料」並附原因，不補成 `0`。沒有觀測到不代表沒送達；不承諾即時、完整或兩平台對稱的報表。
 
-FCM 每日最多報告 100 個不同 Analytics label。以一個 `push_id` 對應一個 label 的作法先符合目前活動頻率；超過限制的報表缺漏不能算成零。匯出需要對應個別通知，因此若全平台實測接近此上限，須先另行評估並修訂契約，不能直接改成活動／日期 label 而失去逐筆對照。
+FCM 每日最多報告 100 個不同 Analytics label。一個 `push_id` 對應一個 label，label 使用量按全平台每日推播操作合計；超過限制的報表缺漏不能算成零。匯出需要對應個別通知，因此若全平台實測接近此上限，須先另行評估並修訂契約，不能直接改成活動／日期 label 而失去逐筆對照。
 
 #### Apple 送達資料
 
@@ -158,7 +161,7 @@ CSV 依主辦方需要匯出，標示實際統計截止與匯出時間；交付�
 
 ## 結果與取捨
 
-- 一次 topic fanout 取代約 1,277 次逐裝置發送；Gateway 的 request 數量取決於角色數乘以語系數，而非登入人數。
+- FCM 負責 topic fanout；Gateway 的 request 數量取決於角色數乘以語系數，而非登入人數。
 - Admin 可直接發布，CCIP-Server 無須新增推播 endpoint 或保存憑證；活動 Gateway key 只能向所屬 `EVENT_ID` 的公開 topic 發布，中央 Firebase 權限不外流。
 - 活動方接受所有 Basic Auth Admin 使用者都能在瀏覽器看到發布 key；相對風險是 key 可被複製，必須能快速輪替與撤銷。
 - 不支援 OneSignal 舊版 App、雙送或相容期；只處理採用新契約的 App 版本。
@@ -171,8 +174,8 @@ CSV 依主辦方需要匯出，標示實際統計截止與匯出時間；交付�
 - CCIP-Serverless
 - 逐裝置追蹤、私密訊息與交易型通知
 - Gateway 管理後台、佇列、device registry 或自建 Analytics 系統
-- UnifiedPush、本版的部分／未知結果補送、表單或現場轉化追蹤、長期報表服務
-- 為本次推播整合新增登出或逐活動靜音 UI
+- UnifiedPush、部分／未知結果補送、表單或現場轉化追蹤、長期報表服務
+- 新增 App 登出或逐活動靜音 UI
 
 ## 驗收重點
 

@@ -27,7 +27,7 @@ info:
     Access-Control-Allow-Credentials。Admin 的 Basic Auth 不轉送給 Gateway。
 servers:
   - url: https://push.opass.app
-    description: Production（預定）
+    description: 中央 Gateway 的規劃端點；可用性以中央維運提供的部署紀錄為準。
 tags:
   - name: Context
   - name: Messages
@@ -64,6 +64,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EventContext'
+        '400':
+          description: context 查詢不接受 query parameters，包括呼叫端指定的活動。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '401':
           description: Gateway key 缺少、無效或已撤銷
           content:
@@ -103,6 +109,9 @@ paths:
       description: |
         Gateway 對每個 role 的英文與正體中文各發送一則 FCM topic message。
         只有所有 message 都被 FCM 接受時才回傳 200。
+
+        派送結果保存失敗不改變真實派送結果或 HTTP 狀態：所有 message 均被
+        接受仍回傳 200；有未確認接受的項目則回傳 502，保存錯誤另行記錄。
 
         標題使用中央登記的 organizer_name，不接受呼叫端指定標題或期限。
         活動結束後 30 × 24 小時停止開始新派送，所有輪替 key 共用期限。
@@ -187,8 +196,9 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '500':
           description: |
-            開始派送前的 Gateway 設定錯誤或內部錯誤。派送開始後若仍可回應，
-            回傳 502 與完整結果；若無法取得完整回應，Admin 視為結果未知。
+            開始派送前的 Gateway 設定錯誤或內部錯誤，尚未開始任何 FCM 派送。
+            派送開始後，依真實派送結果回傳 200 或 502；結果保存失敗不改變
+            此判定。若無法取得完整回應，Admin 視為結果未知。
           content:
             application/json:
               schema:
@@ -251,7 +261,7 @@ components:
         publishing_enabled:
           type: boolean
           description: |
-            本次查詢時 key 已通過驗證且目前時間早於 send_until。只是目前狀態，
+            產生回應時 key 已通過驗證且 Gateway 時間早於 send_until。此值是查詢時的狀態，
             不是未來發送保證；POST 仍重新驗證 key、origin 與期限。
     EventId:
       type: string

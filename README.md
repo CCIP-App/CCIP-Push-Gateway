@@ -2,9 +2,10 @@
 
 OPass 的中央 FCM topic 推播閘道，供受活動方 reverse proxy Basic Auth 保護的 CCIP-Admin-Bueno 發送所屬活動的公開推播，且不接觸 OPass 的 Firebase service account。
 
-目前這個 repository 先確立跨專案契約，尚未包含 Cloudflare Worker 實作：
+Gateway v1 的跨專案契約如下。架構採用中央 D1 保存公開推播內容與已知派送結果；部署以不綁定有效付款方式為前提：
 
 - [ADR 0001：FCM topic Push Gateway](docs/adr/0001-fcm-topic-push-gateway.md)
+- [ADR 0002：D1 內容保存](docs/adr/0002-content-export-storage.md)
 - [OpenAPI 契約](openapi.yaml)
 
 ## 信任邊界
