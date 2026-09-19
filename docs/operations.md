@@ -1,8 +1,10 @@
-# Gateway 操作
+# Gateway 操作與交付
 
-此手冊供 OPass 中央維運者設定 Gateway 與判讀派送結果。開發與檢查使用本機環境；雲端資源與發布由具有對應權限的中央維運者操作。驗收條件與證據要求見[測試與發布驗收](verification.md)。
+此手冊供 OPass 中央維運者設定 Gateway、判讀派送結果及交付活動資料。開發與檢查使用本機環境；雲端資源與發布由具有對應權限的中央維運者操作。驗收條件與證據要求見[測試與發布驗收](verification.md)。
 
-以下發布流程適用於通過 [D1 實作驗收](verification.md#d1-實作驗收)的版本。資料結構見 [migration](../migrations/0001_push_records.sql)。執行前核對目標 database 與程式版本；ADR 採納與文件內容不能代替部署證據。
+以下發布與交付流程適用於通過 [D1 實作驗收](verification.md#d1-實作驗收)的版本。資料結構見 [migration](../migrations/0001_push_records.sql)，內容查詢見 [`reports/content.sql`](../reports/content.sql)。執行前核對目標 database 與程式版本；ADR 採納與文件內容不能代替部署證據。
+
+理解資料如何流動可先讀[發送時序](architecture.md#發送時序)與 [CSV 交付圖](architecture.md#csv-交付)，再依下列步驟操作。
 
 ## 開發與檢查
 
@@ -14,7 +16,7 @@ npm run dev
 npm run check
 ```
 
-範例設定為空，API 會拒絕沒有有效 key 的呼叫。完整發送流程用 `npm test` 的假 OAuth／FCM 上游驗證；RSA 金鑰僅在測試執行中產生。`npm run build` 僅 dry-run 打包，輸出在 `dist/`。
+範例設定為空，API 會拒絕沒有有效 key 的呼叫。完整發送流程用 `npm test` 的假 OAuth／FCM 上游驗證；RSA 金鑰僅在測試執行中產生。CSV 測試使用 Node.js 原生 test runner 與暫存目錄。`npm run build` 僅 dry-run 打包，輸出在 `dist/`。
 
 `wrangler dev --local` 只代表 bindings 在本機；填入正式 service account 後的外部 `fetch` 仍可能送出通知，因此本機開發只使用空設定或測試憑證。受限環境若禁止 runtime 綁定 loopback 通訊埠，需放行本機測試；日誌路徑可用 `WRANGLER_LOG_PATH=/tmp/opass-push-gateway-logs` 覆寫。
 
@@ -98,6 +100,51 @@ Admin 先用相同 key 呼叫 `/v1/context`，比對其設定的活動。錯誤�
 | `RESULT_RECORD_FAILED` 日誌    | FCM 結果已產生但 D1 結果保存失敗；HTTP 仍回傳真實結果，可由該日誌保留已知結果 |
 
 D1 紀錄以活動 ID 與 `push_id` 識別，保存完整內容快照及可取得的派送結果。缺少結果不等於未發送，內容存在也不等於發送成功；D1 與 FCM 沒有跨服務交易。日誌僅輸出正規化結果與原因，不記錄 upstream diagnostic body、Authorization、OAuth token 或私鑰。先檢查中央設定、D1 狀態／用量與相同 `push_id` 的紀錄；沒有補送或操作狀態 API。
+
+## 活動內容 CSV
+
+中央維運者以 D1 唯讀查詢取得**指定活動與截止時間**的內容，再交由本機工具產生 CSV。查詢使用中央權限，主辦方只取得完成核對的活動檔案。
+
+`push_records` 每筆保存 `push_id`、`event_id`、`created_at`、`content_json` 與可為空的 `result_json`；活動／時間索引支援範圍查詢。`created_at` 固定使用含毫秒的 UTC 格式，內容快照保留版本、完整本文與期限，結果更新只改動 `result_json`。
+
+1. 複製 [`reports/content.sql`](../reports/content.sql) 到受控的新工作目錄，填入中央登記的活動 ID 與截止時間。活動 ID 只接受 `[A-Za-z0-9_-]{1,64}`，SQL 截止時間使用 `YYYY-MM-DDTHH:mm:ss.sssZ`；條件包含截止時間當下。保留原有欄位、活動／時間條件與 `COUNT(*) OVER () AS source_count`，不加分頁或 `LIMIT`。
+2. 以 [Wrangler `d1 execute`](https://developers.cloudflare.com/d1/wrangler-commands/) 下載單一查詢的 JSON。以下使用範例活動與本機 D1；中央交付時須核對 database ID、已授權的活動與截止時間後，才將 `--local` 改為 `--remote`。檔名須未被使用，查詢失敗時不繼續匯出。
+
+   ```sh
+   npx wrangler d1 execute PUSH_RECORDS --local --file exports/content.sql --json > exports/query.json
+   npm run export:content -- --input exports/query.json --event EXAMPLE_2027 --output exports/EXAMPLE_2027-20270314 --cutoff 2027-03-14T00:00:00.000Z
+   ```
+
+3. 工具接受一個成功的 Wrangler 查詢結果陣列，核對每列的 `source_count` 等於完整輸入筆數，並檢查索引欄位與內容身分一致。其他活動、截止後內容、重複 `push_id`、損壞內容或空範圍均拒絕，不產生看似完整的交付。輸出目錄必須尚不存在。缺少派送結果不阻止既有內容的交付，也不當成零送達。
+4. 保存 database ID、程式版本、完整查詢、來源筆數、截止與下載時間。筆數相符不能證明選對查詢條件；仍須人工核對活動與截止，確認沒有修改查詢而排除應交付內容。SQL 備份不作為此工具輸入。
+
+輸出三個檔案：
+
+- `content.csv`：每筆操作各兩個語系列，含活動、`push_id`、時間、角色、標題、本文、URI、來源及截止／匯出時間；有 CSV 逸出、UTF-8 BOM 與公式注入防護。
+- `pushes.json`：僅該活動、截止前的 `push_id` 與發送時間清單，供原生統計查詢限定範圍。
+- `export.json`：筆數、匯出時間及內容紀錄的涵蓋限制。這三個檔案提供內容對照；FCM 接受結果與裝置送達統計須分別查閱派送紀錄及原生統計來源。
+
+## 原生成效 CSV
+
+先完成中央 Firebase／Analytics 與 BigQuery 連結、雙平台 delivery export，以及遵守使用者選擇的 Analytics 設定。iOS 還需最小 Notification Service Extension 與 APNs 設定。上線驗收必須確認通知的 `push_id` 能在原生資料查得；這些步驟不由 Gateway 代辦。
+
+成效平台的具體方案須符合不綁定有效付款方式的部署約束，不能由 D1 的選型推定已可用。若評估 Firebase Spark／BigQuery Sandbox，須另外驗證原生匯入功能、查詢與匯出能力、資料到期及累積額度；可啟用 Sandbox 不代表完整交付流程已驗證。依[官方限制](https://docs.cloud.google.com/bigquery/docs/sandbox#limitations)排定交付時點，早於相關 table／partition 的實際到期時間；不能從活動結束或停發日起算保存窗口。功能或額度不符時重新確認方案，不擅自改變 ADR 0001 的雙平台成效範圍。
+
+送達查詢使用 [`reports/fcm-delivery.sql`](../reports/fcm-delivery.sql)。在 BigQuery Console 將 `YOUR_PROJECT_ID` 換成中央專案，設定 named parameters：
+
+| 參數          | BigQuery 型別 | 內容                           |
+| ------------- | ------------- | ------------------------------ |
+| `event_id`    | STRING        | 匯出的活動 ID                  |
+| `pushes_json` | STRING        | `pushes.json` 的完整 JSON 文字 |
+| `cutoff_at`   | TIMESTAMP     | `export.json` 中的 `cutoff_at` |
+
+查詢先限定內容清單的 labels，再分平台彙總 `MESSAGE_DELIVERED`。計數單位是不同「訊息 × App 安裝實例」組合，同一安裝可有多則通知，不是自然人人數。裝置欄位僅在 BigQuery 內去重，不輸出逐裝置資料。沒有觀測紀錄保留空值與原因；不要補零。匯入 partition 時間和事件時間不同，查詢保留截止後才匯入的紀錄。查詢依 [Firebase 公開 schema](https://firebase.google.com/docs/cloud-messaging/understand-delivery#what_data_is_exported_to_bigquery) 使用 `analytics_label`、`event_timestamp`、`sdk_platform` 等欄位；部署驗收須在目標資料集確認欄位、平台值及實際涵蓋情形。
+
+將查詢結果以 BigQuery 原生 CSV 儲存為 `delivery.csv`。在 Firebase Messaging Reports 依相同 labels **逐筆**、逐平台篩選，以原生 CSV 匯出 `Opens`；若介面合併 labels，必須分開匯出，保留檔名到 `push_id`／平台的對照。通知點擊僅涵蓋平台能提供的背景通知開啟，不能解讀為全體點擊、網站載入或轉化。送達 SQL 的 `open_count` 留空，另以原生 Opens 資料交付，來源不混加。
+
+交付附註須記錄每份統計的來源、平台、單位、截止與匯出時間，以及無資料原因（未啟用、等待匯入、不支援、同意範圍不足或 label 上限等）。無觀測資料不能直接判定是哪個原因，需先核對設定與匯入狀態。報表日更與 label 數量限制見 [Firebase 報表說明](https://firebase.google.com/docs/cloud-messaging/understand-delivery)。內容中的自由文字只使用本工具產出的 CSV；不把未處理的 upstream 自由文字拼入試算表。
+
+交付前核對每個統計 label 都存在於 `pushes.json`、每個 `push_id` 都能對應雙語本文，且資料只包含指定活動的彙總數字。保存匯出／交付時間、收件對象、內容筆數、缺漏說明與約定清理日期；完成主辦方交付後才依約定刪除中央內容及本機匯出。停發不觸發資料清理，隔年保存由主辦方負責。
 
 ## 備份與清理
 

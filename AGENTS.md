@@ -34,9 +34,9 @@ The Worker uses TypeScript and native Workers Web APIs, with npm and a committed
 - Individual checks: `npm run format:check`, `npm run typecheck`, `npm run contract:check`, `npm test`, and `npm run build` (Wrangler dry-run).
 - Formatting: `npm run format`; preserve soft-wrapped Markdown prose.
 
-API tests run in the local Workers runtime using the official Cloudflare Vitest integration. `npm test` runs both. Block real outbound network access in API tests. Never put real credentials in fixtures, and never add deployment to the verification workflow.
+API tests run in the local Workers runtime using the official Cloudflare Vitest integration; the CSV CLI uses Node's built-in test runner. `npm test` runs both. Block real outbound network access in API tests. Never put real credentials in fixtures, and never add deployment to the verification workflow.
 
-Apply local D1 migrations with `npx wrangler d1 migrations apply PUSH_RECORDS --local`. Follow `docs/operations.md` for central configuration and dispatch operations.
+Apply local D1 migrations with `npx wrangler d1 migrations apply PUSH_RECORDS --local`. Export a scoped Wrangler query JSON with `npm run export:content -- --input <query.json> --event <EVENT_ID> --output <new-directory> --cutoff <RFC3339>`. Follow `reports/content.sql` and `docs/operations.md` for source completeness, native metrics and handoff requirements.
 
 ## Non-negotiable architecture
 

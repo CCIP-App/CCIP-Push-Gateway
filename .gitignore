@@ -9,6 +9,7 @@ node_modules/
 dist/
 .wrangler/
 coverage/
+exports/
 *.log
 
 # Local editor and OS files

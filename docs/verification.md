@@ -11,10 +11,10 @@ Gateway 驗證分為 repository 自動檢查、跨專案整合與目標環境驗
 | `npm run format:check`   | Prettier 納管檔案的格式；排除項目見 [`.prettierignore`](../.prettierignore) |
 | `npm run typecheck`      | Worker 與 TypeScript 測試的靜態型別                                         |
 | `npm run contract:check` | OpenAPI YAML 語法、重複鍵與本機 `$ref` 目標；不等同完整 OpenAPI 語意驗證    |
-| `npm test`               | Workers runtime API 測試                                                    |
+| `npm test`               | Workers runtime API 測試與 Node.js 原生 CSV／CLI 測試                       |
 | `npm run build`          | Wrangler dry-run 打包及 binding 設定檢查，不部署                            |
 
-API 測試在本機 Workers runtime 執行，攔截所有 OAuth／FCM `fetch`；RSA 金鑰在測試執行時產生。每次派送測試透過官方 `applyD1Migrations` 在隔離的 D1 套用 repo migrations。測試環境須允許 loopback 通訊與測試子程序，無須正式 Cloudflare／Firebase 憑證。
+API 測試在本機 Workers runtime 執行，攔截所有 OAuth／FCM `fetch`；RSA 金鑰在測試執行時產生。每次派送測試透過官方 `applyD1Migrations` 在隔離的 D1 套用 repo migrations。CSV 測試使用暫存檔案，另以 Wrangler `--local` 建立暫存 D1，執行 migrations、內容查詢與匯出。測試環境須允許 loopback 通訊與測試子程序，無須正式 Cloudflare／Firebase 憑證。
 
 | 行為           | 主要案例與原始碼                                                                                                                                                                |
 | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -22,6 +22,7 @@ API 測試在本機 Workers runtime 執行，攔截所有 OAuth／FCM `fetch`；
 | 輸入與內容限制 | 拒絕 `all`、完整 topic、裝置識別、非法角色／語系／URI；所有 UTF-8 payload 在派送前檢查；[`messages.test.ts`](../test/messages.test.ts)                                          |
 | 派送結果與期限 | OAuth 簽章、雙語 fanout、六個並行上限、固定期限、有限重試、活動截止，以及 accepted／rejected／not_attempted／unknown 的完整分組；[`messages.test.ts`](../test/messages.test.ts) |
 | 保存與敏感資料 | D1 寫入失敗或未新增紀錄不得發送；結果寫入失敗及找不到原紀錄時保留真實 HTTP 結果，日誌不含憑證；[`messages.test.ts`](../test/messages.test.ts)                                   |
+| 活動內容交付   | 原生 D1 查詢、活動與截止邊界、來源截斷及身分不符、CSV 逸出、公式注入防護、重複或損壞紀錄、缺少派送結果與 CLI 操作；[`export.test.mjs`](../test/export.test.mjs)                 |
 
 HTTP 契約修改須一併核對實作與回歸案例。文件變更檢查相對連結、命令與來源一致性；OpenAPI 描述變更仍須執行 `contract:check`。測試數量與打包大小取自指定版本的執行結果，不寫成持續有效的專案屬性。
 
