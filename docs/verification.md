@@ -51,11 +51,15 @@ D1 實作驗收與雲端服務條件、帳號設定及實機成效驗收分別�
 
 ## 跨專案與目標環境驗收
 
-App 統計選擇須在該流程實作前定案；各活動設定、資料交付與清理約定、維運責任及服務條件須在正式發布前確認。Gateway 執行、內容保存及原生成效交付均不得要求綁定有效付款方式；不符合時重新評估決策，不自動升級付費。這些前置條件與架構採納分別記錄，不以 Gateway 自動測試通過代替。
+App 統計選擇須在該流程實作前定案；未定案時可先完成 Gateway、Admin、通知訂閱與導頁，統計選擇流程保留待決，不以現有 Analytics 開關推定產品決策。各活動設定、資料交付與清理約定、維運責任及服務條件須在正式發布前確認。Gateway 執行、內容保存及原生成效交付均不得要求綁定有效付款方式；不符合時重新評估決策，不自動升級付費。這些前置條件與架構採納分別記錄，不以 Gateway 自動測試通過代替。
 
 驗收使用獲授權的測試活動、帳號與裝置；流程與設定入口見[操作文件](operations.md)。
 
 跨專案工作分別追蹤於 [Admin #50](https://github.com/CCIP-App/CCIP-Admin-Bueno/issues/50)、[Android #128](https://github.com/CCIP-App/CCIP-Android/issues/128) 與 [iOS #68](https://github.com/CCIP-App/CCIP-iOS/issues/68)。實作與驗收須記錄各 repo revision，並核對 issues 引用的契約版本與本 repo 已採用的 ADR、OpenAPI 一致。
+
+App 整合依選定 SDK 的官方文件與 release notes 核對 FID registration、APNs 及統計 API，套件版本與 lockfile 一起更新。驗收須涵蓋既有安裝升級、快取 registration 及語系切換；只驗證乾淨安裝不足以確認訂閱恢復。Admin 擴充既有 Playwright smoke 與 mock，不另建測試框架。
+
+iOS 的 SwiftUI delegate 須依 [Firebase 官方接收指引](https://firebase.google.com/docs/cloud-messaging/ios/receive-messages#handle_messages_with_method_swizzling_disabled)明確轉交 APNs token，並接妥 `appDidReceiveMessage` 所需的收到／點擊回呼；不能只在停用 swizzling 時才檢查手動串接。以實機驗證允許蒐集時的原生統計既不漏報也不重複計數，拒絕或撤回時停止蒐集，通知顯示與導頁仍正常。
 
 實機測試前準備以下資訊；憑證透過受保護的管道提供，repo／issue 只記錄設定需求、取得方式及不含秘密的驗收結果：
 
