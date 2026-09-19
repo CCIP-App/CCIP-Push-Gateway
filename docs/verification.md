@@ -4,12 +4,12 @@ Gateway 驗證分為 repository 自動檢查、跨專案整合與目標環境驗
 
 ## 自動檢查
 
-使用 Node.js 24 以上，先執行 `npm ci`，再執行 `npm run check`。命令由 [`package.json`](../package.json) 定義，[CI](../.github/workflows/check.yml) 執行相同流程。
+使用 Node.js 24 LTS 與 npm 11，依 [`.node-version`](../.node-version) 安裝預設 Node 版本，先執行 `npm ci`，再執行 `npm run check`。命令由 [`package.json`](../package.json) 定義，[CI](../.github/workflows/check.yml) 讀取同一版本檔並執行相同流程。
 
 | 命令                     | 驗證範圍                                                                    |
 | ------------------------ | --------------------------------------------------------------------------- |
 | `npm run format:check`   | Prettier 納管檔案的格式；排除項目見 [`.prettierignore`](../.prettierignore) |
-| `npm run typecheck`      | Worker 與 TypeScript 測試的靜態型別                                         |
+| `npm run typecheck`      | 依 Worker 設定重建型別，再檢查 Worker 與 TypeScript 測試                    |
 | `npm run contract:check` | OpenAPI YAML 語法、重複鍵與本機 `$ref` 目標；不等同完整 OpenAPI 語意驗證    |
 | `npm test`               | Workers runtime API 測試與 Node.js 原生 CSV／CLI 測試                       |
 | `npm run build`          | Wrangler dry-run 打包及 binding 設定檢查，不部署                            |
@@ -27,6 +27,16 @@ API 測試在本機 Workers runtime 執行，攔截所有 OAuth／FCM `fetch`；
 HTTP 契約修改須一併核對實作與回歸案例。文件變更檢查相對連結、命令與來源一致性；OpenAPI 描述變更仍須執行 `contract:check`。測試數量與打包大小取自指定版本的執行結果，不寫成持續有效的專案屬性。
 
 Mermaid 圖解須對照契約與實作，另行渲染檢查語法、文字、連線與版面；`npm run check` 不包含 Mermaid 渲染。
+
+## 工具鏈維護
+
+Node 使用 LTS 主版本；預設版本及其隨附 npm 由 `.node-version` 對應的 Node 發行版提供，`package.json` 的 `engines` 宣告支援範圍。Node 的更新一併修改版本檔並執行檢查，不由套件更新順帶切換主版本。
+
+直接開發依賴採精確版本，與 `package-lock.json` 一起更新；安裝使用 `npm ci`。維護時選擇符合既有環境與 peer dependencies 的最新穩定版本。Wrangler、Cloudflare Vitest plugin 與 Vitest 須作為相容組合檢查；若整合尚未支援新版主版本，保留最新的相容版本，並在更新紀錄說明原因，不使用 `--force` 或 `--legacy-peer-deps` 略過相容性檢查。
+
+Workers 型別使用官方 [`wrangler types`](https://developers.cloudflare.com/workers/languages/typescript/)，依 `wrangler.jsonc` 的 bindings、`compatibility_date` 與 flags 產生至 `.wrangler/types/worker-configuration.d.ts`。安裝與型別檢查會重建產物，Git 與 Prettier 均排除產物；秘密欄位由 `src/types.ts` 明列，不依賴某台設備的 `.dev.vars`。相容日期啟用的 Node API 另載入 `@types/node`，其主版本配合 Node 24 維護基準。`compatibility_date` 控制 Workers API 行為，與 Node 或工具套件版本分開審核及驗證。
+
+更新後執行 `npm ls --depth=0` 與完整 `npm run check`。工具鏈或安裝流程變更另以沒有 `node_modules`、`.wrangler`、`.dev.vars` 的乾淨副本執行 `npm ci` 與 `npm run check`，確認不依賴全域 Wrangler、本機憑證或未提交產物，且安裝與檢查不修改受版本管理的檔案。
 
 ## D1 實作驗收
 

@@ -1,8 +1,6 @@
-export interface Env {
+export interface Env extends Cloudflare.Env {
   EVENT_CONFIG_JSON: string;
   FIREBASE_SERVICE_ACCOUNT: string;
-  EVENT_RATE_LIMITER: RateLimit;
-  PUSH_RECORDS: D1Database;
 }
 
 export interface EventKey {

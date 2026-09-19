@@ -21,7 +21,7 @@ OpenAPI 與 ADR 分別承載 HTTP 契約與架構決策；操作文件說明如�
 
 ## 本機開發
 
-使用 Node.js 24 以上與 npm。執行期直接使用 Workers Web APIs，開發工具以 `package-lock.json` 固定版本。
+使用 Node.js 24 LTS 與 npm 11；本機與 CI 的預設 Node 版本見 [`.node-version`](.node-version)。執行期直接使用 Workers Web APIs，開發工具以 `package-lock.json` 固定版本。
 
 ```sh
 npm ci
@@ -32,6 +32,8 @@ npm run check
 ```
 
 `.dev.vars.example` 提供拒絕所有未授權呼叫的空設定；`.dev.vars` 不納入 Git。`npm run dev` 使用本機 bindings，但外部 `fetch` 仍可連網，開發時不使用正式發送憑證。
+
+`npm ci` 會依 `wrangler.jsonc` 產生 Workers 與 bindings 型別至 `.wrangler/types/worker-configuration.d.ts`，不需本機秘密設定，也不將產物納入 Git。修改 Worker 設定後執行 `npm run types`；`npm run typecheck` 也會先重建。工具鏈相容性與升級規則見[測試與發布驗收](docs/verification.md#工具鏈維護)。
 
 D1 的資料結構由 [`migrations/`](migrations/0001_push_records.sql) 管理；`wrangler.jsonc` 的零值 database ID 僅供本機開發，部署前由中央維運者填入目標 ID。內容匯出使用 [D1 查詢](reports/content.sql)與[活動 CSV 操作步驟](docs/operations.md#活動內容-csv)。
 

@@ -4,13 +4,16 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=24"
+    "node": "24.x",
+    "npm": "11.x"
   },
   "scripts": {
+    "postinstall": "npm run types",
     "dev": "wrangler dev --local",
     "test": "vitest run && node --test test/*.test.mjs",
     "export:content": "node scripts/export-content.mjs",
-    "typecheck": "tsc --noEmit",
+    "types": "node -e \"require('node:fs').mkdirSync('.wrangler/types', { recursive: true })\" && wrangler types .wrangler/types/worker-configuration.d.ts",
+    "typecheck": "npm run types && tsc --noEmit",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "contract:check": "node scripts/check-contract.mjs",
@@ -18,12 +21,12 @@
     "check": "npm run format:check && npm run typecheck && npm run contract:check && npm test && npm run build"
   },
   "devDependencies": {
-    "@cloudflare/vitest-plugin": "1.1.10",
-    "@cloudflare/workers-types": "5.20260916.1",
-    "prettier": "3.9.7",
+    "@cloudflare/vitest-plugin": "1.1.13",
+    "@types/node": "24.13.6",
+    "prettier": "3.9.8",
     "typescript": "7.0.2",
     "vitest": "4.1.11",
-    "wrangler": "4.132.0",
+    "wrangler": "4.135.0",
     "yaml": "2.9.1"
   }
 }

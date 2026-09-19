@@ -26,13 +26,17 @@ When behavior and documentation disagree, do not silently choose one. Identify t
 
 ## Development and verification
 
-The Worker uses TypeScript and native Workers Web APIs, with npm and a committed package lock. Use Node.js 24 or newer.
+The Worker uses TypeScript and native Workers Web APIs, with npm and a committed package lock. Use Node.js 24 LTS and npm 11; `.node-version` is the shared local and CI baseline.
 
 - Install: `npm ci`.
 - Local development: `npm run dev` (local Wrangler, no deployment).
 - All checks: `npm run check`.
 - Individual checks: `npm run format:check`, `npm run typecheck`, `npm run contract:check`, `npm test`, and `npm run build` (Wrangler dry-run).
 - Formatting: `npm run format`; preserve soft-wrapped Markdown prose.
+
+`npm ci` generates Workers and binding types under the ignored `.wrangler/types/` directory. Run `npm run types` after changing Wrangler configuration; `typecheck` also regenerates them. Keep secret properties explicit in `src/types.ts` and inherit generated bindings from `Cloudflare.Env`.
+
+Keep direct dependencies exact and update the lockfile together. Select compatible stable releases, checking Wrangler, the Cloudflare test plugin and Vitest as a set; review `compatibility_date` changes separately. Follow `docs/verification.md` for clean-install and upgrade checks.
 
 API tests run in the local Workers runtime using the official Cloudflare Vitest integration; the CSV CLI uses Node's built-in test runner. `npm test` runs both. Block real outbound network access in API tests. Never put real credentials in fixtures, and never add deployment to the verification workflow.
 
