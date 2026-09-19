@@ -94,6 +94,9 @@ function upstream(
   respond?: (message: Record<string, any>) => Response | Promise<Response>,
 ) {
   vi.mocked(fetch).mockImplementation(async (url, init) => {
+    // Construct the request in workerd too: a fetch stub alone misses unsupported options.
+    const outbound = new Request(String(url), init);
+    expect(outbound.redirect).toBe("manual");
     if (url === "https://oauth2.googleapis.com/token")
       return Response.json({
         access_token: "test-oauth-token",
@@ -103,7 +106,7 @@ function upstream(
     expect(url).toBe(
       "https://fcm.googleapis.com/v1/projects/opass-tests/messages:send",
     );
-    expect(init?.redirect).toBe("error");
+    expect(init?.redirect).toBe("manual");
     expect(new Headers(init?.headers).get("Authorization")).toBe(
       "Bearer test-oauth-token",
     );
@@ -145,6 +148,34 @@ function rejected(status: number, code: string, retryAfter?: string) {
 }
 
 describe("message dispatch contract", () => {
+  it("does not follow OAuth redirects or attempt FCM after them", async () => {
+    vi.mocked(fetch).mockImplementation(async (url, init) => {
+      expect(new Request(String(url), init).redirect).toBe("manual");
+      expect(url).toBe("https://oauth2.googleapis.com/token");
+      return new Response(null, {
+        status: 302,
+        headers: { Location: "https://untrusted.example/token" },
+      });
+    });
+    const { response, result } = await send();
+    expect(response.status).toBe(502);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({
+      status: "incomplete",
+      accepted: [],
+      unaccepted: [
+        expect.objectContaining({
+          outcome: "not_attempted",
+          code: "OAUTH_FAILED",
+        }),
+        expect.objectContaining({
+          outcome: "not_attempted",
+          code: "OAUTH_FAILED",
+        }),
+      ],
+    });
+  });
+
   it("allows POST preflight without credentials and denies another method", async () => {
     for (const method of ["POST", "GET"]) {
       const response = await worker.fetch(
@@ -313,7 +344,11 @@ describe("message dispatch contract", () => {
       expect(message.android).toEqual({
         priority: "normal",
         ttl: "3600s",
-        notification: { channel_id: "announcements", sound: "default" },
+        notification: {
+          channel_id: "announcements",
+          sound: "default",
+          default_vibrate_timings: true,
+        },
       });
       expect(message.apns).toEqual({
         headers: {
@@ -591,14 +626,20 @@ describe("message dispatch contract", () => {
     new Response("not JSON", { status: 503 }),
     Response.json({}),
     Response.json({ error: { status: "SECRET_DIAGNOSTIC" } }, { status: 500 }),
+    rejected(504, "DEADLINE_EXCEEDED"),
   ])(
-    "treats unclassifiable upstream responses as unknown",
-    async (response) => {
-      upstream(() => response.clone());
-      const { result } = await send();
+    "treats upstream responses without a definite outcome as unknown",
+    async (upstreamResponse) => {
+      upstream(() => upstreamResponse.clone());
+      const { response, result } = await send();
+      expect(response.status).toBe(502);
       if (result.status === "incomplete")
         expect(
-          result.unaccepted.every((item) => item.outcome === "unknown"),
+          result.unaccepted.every(
+            (item) =>
+              item.outcome === "unknown" &&
+              item.code === "UPSTREAM_OUTCOME_UNKNOWN",
+          ),
         ).toBe(true);
       else throw new Error("Expected incomplete");
       expect(sent).toHaveLength(2);
@@ -647,20 +688,29 @@ describe("message dispatch contract", () => {
     else throw new Error("Expected incomplete");
   });
 
-  it("keeps retry transport failures unknown instead of restoring the first rejection", async () => {
-    const attempts = new Set<string>();
-    upstream((message) => {
-      if (attempts.has(message.topic)) throw new Error("connection reset");
-      attempts.add(message.topic);
-      return rejected(503, "UNAVAILABLE");
-    });
-    const { result } = await send();
-    expect(sent).toHaveLength(4);
-    if (result.status === "incomplete")
-      expect(
-        result.unaccepted.every((item) => item.outcome === "unknown"),
-      ).toBe(true);
-  });
+  it.each(["transport failure", "deadline exceeded"])(
+    "keeps retry %s unknown instead of restoring the first rejection",
+    async (failure) => {
+      const attempts = new Set<string>();
+      upstream((message) => {
+        if (attempts.has(message.topic)) {
+          if (failure === "deadline exceeded")
+            return rejected(504, "DEADLINE_EXCEEDED");
+          throw new Error("connection reset");
+        }
+        attempts.add(message.topic);
+        return rejected(503, "UNAVAILABLE");
+      });
+      const { response, result } = await send();
+      expect(response.status).toBe(502);
+      expect(sent).toHaveLength(4);
+      if (result.status === "incomplete")
+        expect(
+          result.unaccepted.every((item) => item.outcome === "unknown"),
+        ).toBe(true);
+      else throw new Error("Expected incomplete");
+    },
+  );
 
   it("honors long Retry-After without retrying early or scheduling recovery", async () => {
     upstream(() => rejected(503, "UNAVAILABLE", "60"));

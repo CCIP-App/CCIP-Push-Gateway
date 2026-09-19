@@ -71,7 +71,7 @@ Admin 先用相同 key 呼叫 `/v1/context`，比對其設定的活動。錯誤�
 | 原生成效 | 不綁付款方式的專案能否完成雙平台原生匯入、查詢及 CSV 匯出；核對資料到期時間與累積額度                        | [Firebase 匯出與 Sandbox](https://firebase.google.com/docs/projects/bigquery-export#pricing-and-the-bigquery-sandbox)、[Sandbox 限制](https://docs.cloud.google.com/bigquery/docs/sandbox#limitations) |
 
 1. 由授權維運者建立中央 D1 database，將實際名稱與 ID 寫入 `wrangler.jsonc` 的 `PUSH_RECORDS`，取代本機用的零值 ID。確認目標後執行 `npx wrangler d1 migrations apply PUSH_RECORDS --remote`；migrations 納入 Git，不能以本機已套用推定遠端也已套用。操作方式見 [D1 migrations](https://developers.cloudflare.com/d1/reference/migrations/)。中央維運者管理 D1 權限，Admin／App 不取得資料庫或 Cloudflare 憑證。保留待交付內容，不設定提早清理。
-2. 啟用目標專案的 FCM HTTP v1 API。service account 的自訂 IAM role 僅含 `cloudmessaging.messages.create`；不要用 Firebase Admin、Editor 或 Owner 代替。Worker 固定向 Google OAuth endpoint 取 token，只要求 `firebase.messaging` scope，不跟隨 redirect。[權限來源](https://docs.cloud.google.com/iam/docs/roles-permissions/firebasecloudmessaging)
+2. 啟用目標專案的 FCM HTTP v1 API。service account 的自訂 IAM role 僅含 `cloudmessaging.messages.create`；不要用 Firebase Admin、Editor 或 Owner 代替。Worker 固定向 Google OAuth endpoint 取 token，只要求 `firebase.messaging` scope，不跟隨 redirect。Workers outbound fetch 使用支援的 `redirect: "manual"`，將非 2xx 視為失敗，不跟隨 Location；`redirect: "error"` 不受此 runtime 支援。[Workers Request](https://developers.cloudflare.com/workers/runtime-apis/request/)、[權限來源](https://docs.cloud.google.com/iam/docs/roles-permissions/firebasecloudmessaging)
 3. 透過受保護的秘密管理流程輸入下列 secrets；不把 JSON、bearer 或私鑰放進命令列參數、Git 或 CI 日誌。
 
    ```sh

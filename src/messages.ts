@@ -1,6 +1,6 @@
 import {
   accessToken,
-  fcmError,
+  fcmErrorCode,
   prepareAccount,
   retryDelay,
   UPSTREAM_TIMEOUT_MS,
@@ -40,7 +40,11 @@ export function topicMessage(
     android: {
       priority: "normal",
       ttl: `${Math.max(0, Math.floor((Date.parse(record.expires_at) - now) / 1000))}s`,
-      notification: { channel_id: "announcements", sound: "default" },
+      notification: {
+        channel_id: "announcements",
+        sound: "default",
+        default_vibrate_timings: true,
+      },
     },
     apns: {
       headers: {
@@ -188,7 +192,7 @@ export async function sendMessage(
         async () => {
           while (cursor < targets.length) {
             const target = targets[cursor++];
-            const outcome = await dispatch(
+            const dispatchResult = await dispatch(
               target,
               record,
               account,
@@ -197,8 +201,9 @@ export async function sendMessage(
               signal,
               Math.min(deadline, expiresAt, sendUntil),
             );
-            if ("fcm_message_id" in outcome) accepted.push(outcome);
-            else unaccepted.push(outcome);
+            if ("fcm_message_id" in dispatchResult)
+              accepted.push(dispatchResult);
+            else unaccepted.push(dispatchResult);
           }
         },
       ),
@@ -278,7 +283,7 @@ async function dispatch(
         `https://fcm.googleapis.com/v1/projects/${account.projectId}/messages:send`,
         {
           method: "POST",
-          redirect: "error",
+          redirect: "manual",
           headers: {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
@@ -314,7 +319,7 @@ async function dispatch(
         code: "UPSTREAM_OUTCOME_UNKNOWN",
       };
     }
-    const code = fcmError(body);
+    const code = fcmErrorCode(body);
     if (!code)
       return {
         ...target,

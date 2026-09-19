@@ -82,7 +82,7 @@ export async function accessToken(
   );
   const response = await fetch(TOKEN_URL, {
     method: "POST",
-    redirect: "error",
+    redirect: "manual",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
@@ -125,10 +125,9 @@ const FCM_CODES = new Set([
   "UNAUTHENTICATED",
   "NOT_FOUND",
   "RESOURCE_EXHAUSTED",
-  "DEADLINE_EXCEEDED",
 ]);
 
-export function fcmError(value: unknown): string | undefined {
+export function fcmErrorCode(value: unknown): string | undefined {
   if (!isObject(value) || !isObject(value.error)) return;
   const details = value.error.details;
   if (Array.isArray(details)) {
