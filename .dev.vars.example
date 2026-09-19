@@ -1,0 +1,3 @@
+# Only an empty, fail-closed local configuration. Never put production secrets here.
+EVENT_CONFIG_JSON='{"events":{},"keys":[]}'
+FIREBASE_SERVICE_ACCOUNT='{}'

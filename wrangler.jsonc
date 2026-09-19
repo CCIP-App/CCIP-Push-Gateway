@@ -1,0 +1,23 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "opass-push-gateway",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-16",
+  "workers_dev": false,
+  "preview_urls": false,
+  "observability": { "enabled": true, "head_sampling_rate": 1 },
+  "ratelimits": [
+    {
+      "name": "EVENT_RATE_LIMITER",
+      "namespace_id": "1001",
+      "simple": { "limit": 6, "period": 60 },
+    },
+  ],
+  "d1_databases": [
+    {
+      "binding": "PUSH_RECORDS",
+      "database_name": "opass-push-records",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+    },
+  ],
+}

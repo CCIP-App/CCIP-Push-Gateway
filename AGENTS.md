@@ -24,11 +24,19 @@ Sources of truth:
 
 When behavior and documentation disagree, do not silently choose one. Identify the mismatch and update the authoritative artifact as part of the requested change.
 
-## Current project state
+## Development and verification
 
-This is currently a documentation-first repository. It has no Worker implementation, package manager, build system, or test runner yet. Do not add scaffolding, dependencies, or deployment configuration unless the task requires implementation.
+The Worker uses TypeScript and native Workers Web APIs, with npm and a committed package lock. Use Node.js 24 or newer.
 
-When the first implementation is added, update this file with the actual install, validation, test, and local-development commands. Never invent commands that do not exist in the repository.
+- Install: `npm ci`.
+- Local development: `npm run dev` (local Wrangler, no deployment).
+- All checks: `npm run check`.
+- Individual checks: `npm run format:check`, `npm run typecheck`, `npm run contract:check`, `npm test`, and `npm run build` (Wrangler dry-run).
+- Formatting: `npm run format`; preserve soft-wrapped Markdown prose.
+
+API tests run in the local Workers runtime using the official Cloudflare Vitest integration. `npm test` runs both. Block real outbound network access in API tests. Never put real credentials in fixtures, and never add deployment to the verification workflow.
+
+Apply local D1 migrations with `npx wrangler d1 migrations apply PUSH_RECORDS --local`. Follow `docs/operations.md` for central configuration and dispatch operations.
 
 ## Non-negotiable architecture
 
@@ -97,6 +105,7 @@ Before reporting an implementation change complete:
 - Keep code identifiers and protocol field names in English. OpenAPI descriptions and examples may use Traditional Chinese when that improves maintainer comprehension.
 - Write project documentation for readers without the conversation history: state behavior, scope, ownership, and prerequisites directly. Keep task progress and session-relative wording out of durable guides; attach validation results to an identified revision in commit, PR, or release records.
 - Keep decision status, implementation status, and deployment evidence separate. Do not mark an ADR accepted or an integration verified solely because code exists.
+- Keep ADRs focused on decision-relevant context, constraints, tradeoffs, and reassessment triggers. Include provider-plan details only when they materially explain a decision; maintain operational limits and verification procedures in the operations and verification documents.
 - Before implementing an architectural decision, reconcile the relevant ADR status with established decisions and implementation authorization. Record the adopted scope and date before dependent implementation commits, and identify any unresolved product or governance choices and when they must be resolved. Do not ask the user to repeat decisions already made.
 - Refine proposed ADRs in place. Record changes to accepted architecture or governance decisions in a new or superseding ADR; do not silently rewrite decision history.
 

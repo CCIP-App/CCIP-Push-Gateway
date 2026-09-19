@@ -1,0 +1,28 @@
+{
+  "name": "opass-push-gateway",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "wrangler dev --local",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "contract:check": "node scripts/check-contract.mjs",
+    "build": "wrangler deploy --dry-run --outdir dist",
+    "check": "npm run format:check && npm run typecheck && npm run contract:check && npm test && npm run build"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "1.1.10",
+    "@cloudflare/workers-types": "5.20260916.1",
+    "prettier": "3.9.7",
+    "typescript": "7.0.2",
+    "vitest": "4.1.11",
+    "wrangler": "4.132.0",
+    "yaml": "2.9.1"
+  }
+}
