@@ -22,6 +22,16 @@ npm run check
 
 ## 中央設定
 
+### 憑證保管
+
+Cloudflare 部署憑證只授予目標帳號、Worker、D1 與所需 zone 的操作權限，並依維運政策設定到期與輪替。可使用 Wrangler 管理的 OAuth 登入或限定資源的 API token；不使用 Global API key。
+
+Firebase service account 由中央管理，僅授予發送所需權限，並檢查直接及繼承的角色。App 的 Firebase client 設定不能代替 service-account JSON；活動主辦方只取得該活動的 Gateway key，不取得 Cloudflare 或 Firebase 維運憑證。
+
+秘密保存在 repository 外的持久受控儲存，不使用暫存目錄或公開靜態檔案。本機檔案使用 `0700` 目錄及 `0600` 檔案權限；不得將秘密值放進 Git、命令列參數或日誌。Admin Basic Auth 密碼與 Gateway key 使用不同的隨機值，分別管理存取及輪替。
+
+### Worker secrets 與 bindings
+
 依 ADR 0001 與 ADR 0002，Worker 的設定由兩個 secrets 與兩個 bindings 組成：
 
 | 名稱                       | 內容與責任                                                    |
@@ -52,7 +62,7 @@ npm run check
 }
 ```
 
-正式 key 至少使用 32 個隨機 bytes，digest 為其完整 bearer 字串的 UTF-8 SHA-256、小寫十六進位。原始 key 只交給該活動受 Basic Auth 保護、`Cache-Control: no-store` 的 Admin runtime config。Origins 是精確 origin，不含路徑或結尾斜線；正式來源用 HTTPS，本機 HTTP 僅允許 loopback。
+正式 key 至少使用 32 個隨機 bytes，digest 為原始 key 字串的 UTF-8 SHA-256、小寫十六進位，不包含 `Bearer ` 前綴或換行。原始 key 只交給該活動的 Admin runtime config `push-config.json`，其中包含 `gateway_url` 與 `gateway_key`。檔案保存在公開靜態目錄外，預設由 `/admin/push-config.json` 端點提供相同內容，套用 Admin 的 Basic Auth 與 `Cache-Control: no-store`。Origins 是精確 origin，不含路徑或結尾斜線；正式來源用 HTTPS，本機 HTTP 僅允許 loopback。
 
 重疊輪替時保留同一 `event_id` 的舊、新 digest；確認新設定可用後才將舊 key 設為 `revoked`。活動 ID、主辦名稱與結束時間放在 `events`，不隨 key 複製或延長。每次實際 GET／POST 都重新驗證；secret 更新的生效範圍取決於 Cloudflare 的設定傳播，撤銷後須核對實際拒絕結果。
 

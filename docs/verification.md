@@ -63,7 +63,7 @@ iOS 的 SwiftUI delegate 須依 [Firebase 官方接收指引](https://firebase.g
 
 實機測試前準備以下資訊；憑證透過受保護的管道提供，repo／issue 只記錄設定需求、取得方式及不含秘密的驗收結果：
 
-- 測試活動的永久 ID、主辦名稱、結束時間、Server URL、具體角色，以及可驗證的測試登入資料。App 必須能從活動目錄找到該活動；如需專用的 debug 活動入口，在 App repo 明確限定其測試用途。
+- 測試活動的永久 ID、主辦名稱、結束時間、Server URL、具體角色，以及可驗證的測試登入資料。驗收環境須讓 App 能取得並核對該活動設定；一次性活動入口與操作工具不納入產品程式。
 - Admin 的測試 URL、Basic Auth 保護與 runtime config 來源，以及中央 Gateway 登記的精確 origin。確認 context、角色清單與 App 登入資料指向同一活動。
 - Android 測試包的 application ID 與相符的 Firebase client 設定；需要與正式 App 並存時，先備妥獨立的測試 application ID 與設定。Android 裝置須具備所需 Google Play Services；iOS 準備 Xcode、簽章、APNs 設定及實體裝置。
 - 中央 Cloudflare／Firebase 權限、D1 database、Gateway 端點與測試活動 key 的取得方式，以及真實派送的授權範圍。空白範例設定與 dry-run 不代表這些資源已就緒。
