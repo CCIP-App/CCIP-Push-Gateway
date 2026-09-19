@@ -34,16 +34,16 @@ tags:
 paths:
   /v1/context:
     parameters:
-      - $ref: '#/components/parameters/Origin'
+      - $ref: "#/components/parameters/Origin"
     options:
       operationId: preflightContext
       summary: 檢查 context 查詢的瀏覽器來源
       description: 只允許全域登記的 origin、GET 與允許的 request headers，不驗證 bearer key。
       security: []
       responses:
-        '204':
+        "204":
           description: 無本文；回傳該 origin、Access-Control-Allow-Methods 為 GET，以及允許的 request headers。
-        '403':
+        "403":
           description: Origin、要求的方法或 request headers 不允許；不回傳允許存取的 CORS headers。
     get:
       tags:
@@ -58,48 +58,48 @@ paths:
       security:
         - EventKey: []
       responses:
-        '200':
+        "200":
           description: 經 key 與 origin 驗證的中央活動資訊
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/EventContext'
-        '400':
+                $ref: "#/components/schemas/EventContext"
+        "400":
           description: context 查詢不接受 query parameters，包括呼叫端指定的活動。
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '401':
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
           description: Gateway key 缺少、無效或已撤銷
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '403':
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
           description: Origin 缺少或不屬於此 key 的允許清單；code 為 ORIGIN_NOT_ALLOWED。
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '500':
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
           description: 中央活動設定缺少、不合法或無法讀取；不得改用 Admin 本機資料授權發送。
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
   /v1/messages:
     parameters:
-      - $ref: '#/components/parameters/Origin'
+      - $ref: "#/components/parameters/Origin"
     options:
       operationId: preflightMessages
       summary: 檢查發送推播的瀏覽器來源
       description: 只允許全域登記的 origin、POST 與允許的 request headers，不驗證 bearer key。
       security: []
       responses:
-        '204':
+        "204":
           description: 無本文；回傳該 origin、Access-Control-Allow-Methods 為 POST，以及允許的 request headers。
-        '403':
+        "403":
           description: Origin、要求的方法或 request headers 不允許；不回傳允許存取的 CORS headers。
     post:
       tags:
@@ -138,7 +138,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SendMessageRequest'
+              $ref: "#/components/schemas/SendMessageRequest"
             examples:
               allCurrentRoles:
                 summary: Admin 已將「全體」展開成具體角色
@@ -151,38 +151,38 @@ paths:
                     zh-Hant: 午餐已經準備好了。
                   uri: https://sitcon.org/
       responses:
-        '200':
+        "200":
           description: 所有 topic message 均已被 FCM 接受
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AcceptedResponse'
-        '400':
+                $ref: "#/components/schemas/AcceptedResponse"
+        "400":
           description: request 格式、內容或產生的 FCM payload 大小不合法
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '401':
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
           description: Gateway key 缺少、無效或已撤銷
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '403':
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
           description: |
             Origin 缺少或不允許（ORIGIN_NOT_ALLOWED），或目前時間已達中央的
             send_until（EVENT_PUBLISHING_EXPIRED）。尚未開始任何 FCM 派送。
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
               examples:
                 publishingExpired:
                   value:
                     code: EVENT_PUBLISHING_EXPIRED
                     message: 活動結束已滿三十天，停止發布推播。
-        '429':
+        "429":
           description: 此活動的發送頻率超過限制
           headers:
             Retry-After:
@@ -193,8 +193,8 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '500':
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
           description: |
             開始派送前的 Gateway 設定錯誤或內部錯誤，尚未開始任何 FCM 派送。
             派送開始後，依真實派送結果回傳 200 或 502；結果保存失敗不改變
@@ -202,15 +202,15 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '502':
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
           description: |
             未能確認所有項目被 FCM 接受；包含 OAuth 失敗、明確拒絕、傳輸結果
             未知或派送期間到期。依每個組合的實際狀態回報，不表示全部未送出。
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/IncompleteResponse'
+                $ref: "#/components/schemas/IncompleteResponse"
 components:
   parameters:
     Origin:
@@ -240,7 +240,7 @@ components:
         - publishing_enabled
       properties:
         event_id:
-          $ref: '#/components/schemas/EventId'
+          $ref: "#/components/schemas/EventId"
         organizer_name:
           type: string
           minLength: 1
@@ -257,7 +257,7 @@ components:
             含時區的 RFC 3339 時間，等於中央 event_ends_at 加 30 × 24 小時；
             所有同活動 key 共用，輪替不延長。到達此時間即停止開始新派送。
           examples:
-            - '2027-04-05T09:00:00Z'
+            - "2027-04-05T09:00:00Z"
         publishing_enabled:
           type: boolean
           description: |
@@ -265,12 +265,12 @@ components:
             不是未來發送保證；POST 仍重新驗證 key、origin 與期限。
     EventId:
       type: string
-      pattern: '^[A-Za-z0-9_-]{1,64}$'
+      pattern: "^[A-Za-z0-9_-]{1,64}$"
       examples:
         - SITCON_2027
     Role:
       type: string
-      pattern: '^[A-Za-z0-9_-]{1,64}$'
+      pattern: "^[A-Za-z0-9_-]{1,64}$"
       not:
         const: all
       examples:
@@ -303,7 +303,7 @@ components:
           maxItems: 8
           uniqueItems: true
           items:
-            $ref: '#/components/schemas/Role'
+            $ref: "#/components/schemas/Role"
         contents:
           type: object
           additionalProperties: false
@@ -312,13 +312,13 @@ components:
             - zh-Hant
           properties:
             en:
-              $ref: '#/components/schemas/MessageBody'
+              $ref: "#/components/schemas/MessageBody"
             zh-Hant:
-              $ref: '#/components/schemas/MessageBody'
+              $ref: "#/components/schemas/MessageBody"
         uri:
           type: string
           format: uri
-          pattern: '^https://'
+          pattern: "^https://"
           maxLength: 2048
           description: 選填；App 在使用者點擊通知時開啟的 HTTPS URI。
     AcceptedResponse:
@@ -335,7 +335,7 @@ components:
           format: uuid
           description: 作為同一操作所有 FCM message 的 Analytics label。
         event_id:
-          $ref: '#/components/schemas/EventId'
+          $ref: "#/components/schemas/EventId"
         status:
           const: accepted
         dispatches:
@@ -343,7 +343,7 @@ components:
           minItems: 2
           maxItems: 16
           items:
-            $ref: '#/components/schemas/AcceptedDispatch'
+            $ref: "#/components/schemas/AcceptedDispatch"
     AcceptedDispatch:
       type: object
       additionalProperties: false
@@ -354,12 +354,12 @@ components:
         - fcm_message_id
       properties:
         role:
-          $ref: '#/components/schemas/Role'
+          $ref: "#/components/schemas/Role"
         locale:
-          $ref: '#/components/schemas/PushLocale'
+          $ref: "#/components/schemas/PushLocale"
         topic:
           type: string
-          pattern: '^[A-Za-z0-9-_.~%]{1,900}$'
+          pattern: "^[A-Za-z0-9-_.~%]{1,900}$"
           examples:
             - opass-v1.SITCON_2027.audience.zh-Hant
         fcm_message_id:
@@ -386,20 +386,20 @@ components:
           type: string
           format: uuid
         event_id:
-          $ref: '#/components/schemas/EventId'
+          $ref: "#/components/schemas/EventId"
         status:
           const: incomplete
         accepted:
           type: array
           maxItems: 15
           items:
-            $ref: '#/components/schemas/AcceptedDispatch'
+            $ref: "#/components/schemas/AcceptedDispatch"
         unaccepted:
           type: array
           minItems: 1
           maxItems: 16
           items:
-            $ref: '#/components/schemas/UnacceptedDispatch'
+            $ref: "#/components/schemas/UnacceptedDispatch"
     UnacceptedDispatch:
       type: object
       additionalProperties: false
@@ -411,12 +411,12 @@ components:
         - code
       properties:
         role:
-          $ref: '#/components/schemas/Role'
+          $ref: "#/components/schemas/Role"
         locale:
-          $ref: '#/components/schemas/PushLocale'
+          $ref: "#/components/schemas/PushLocale"
         topic:
           type: string
-          pattern: '^[A-Za-z0-9-_.~%]{1,900}$'
+          pattern: "^[A-Za-z0-9-_.~%]{1,900}$"
         outcome:
           type: string
           enum:

@@ -20,11 +20,11 @@ OPass 是共用 App 與平台；各活動主辦單位自行架設、維運一套
 
 中央 OPass Push Gateway 使用獨立 repository，部署為 Cloudflare Worker，透過 FCM HTTP v1 API 發送 topic message。
 
-| 元件 | 責任 |
-| --- | --- |
-| CCIP-Admin-Bueno | 由活動方 Basic Auth 保護；持有活動 Gateway key，透過 CCIP-Server 既有的 `GET roles` 取得具體角色，將「全體」展開後直接呼叫 Gateway |
-| Gateway | 驗證 key、由 key 取得 `EVENT_ID`、建構 topic、呼叫 FCM 並回報 FCM 是否接受 |
-| CCIP-Android、CCIP-iOS | 對每個已登入活動訂閱一個角色／推播語系 topic；處理通知顯示、點擊與 Analytics |
+| 元件                   | 責任                                                                                                                               |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| CCIP-Admin-Bueno       | 由活動方 Basic Auth 保護；持有活動 Gateway key，透過 CCIP-Server 既有的 `GET roles` 取得具體角色，將「全體」展開後直接呼叫 Gateway |
+| Gateway                | 驗證 key、由 key 取得 `EVENT_ID`、建構 topic、呼叫 FCM 並回報 FCM 是否接受                                                         |
+| CCIP-Android、CCIP-iOS | 對每個已登入活動訂閱一個角色／推播語系 topic；處理通知顯示、點擊與 Analytics                                                       |
 
 CCIP-Server 只提供既有的活動角色資料，不取得 Gateway key、不新增推播 endpoint，也不參與推播發送。每套 Admin 部署對應一個永久且唯一的 `EVENT_ID`，但 Gateway request 不接受呼叫端提供 `event_id` 或完整 topic；活動一律由驗證成功的 key 決定，避免主辦單位越權發送。
 
@@ -133,10 +133,10 @@ Admin 先以同一把 key 呼叫 `GET /v1/context`，取得 key 實際綁定的�
 - Firebase 報表與 BigQuery export 使用同一個 `push_id` Analytics label，依平台彙總可取得的送達與通知開啟數。沿用平台現有功能，不新增 Gateway 報表 API、自建追蹤事件服務或報表後台。
 - 不建立裝置 token/FID 中央資料庫，也不承諾逐裝置送達證明。
 
-| 對外名稱 | 資料來源與解讀 |
-| --- | --- |
-| FCM 已接受 | Gateway 的 topic request 結果；不是收件人數，不可當成送達數。Firebase 的 `Sends` 同樣不能當成裝置送達 |
-| 裝置送達數 | Firebase 的 Android `Received`，或已啟用 FCM BigQuery delivery export 的 `MESSAGE_DELIVERED`；依平台與來源分開呈現，不把同一資料的兩種來源相加 |
+| 對外名稱   | 資料來源與解讀                                                                                                                                       |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FCM 已接受 | Gateway 的 topic request 結果；不是收件人數，不可當成送達數。Firebase 的 `Sends` 同樣不能當成裝置送達                                                |
+| 裝置送達數 | Firebase 的 Android `Received`，或已啟用 FCM BigQuery delivery export 的 `MESSAGE_DELIVERED`；依平台與來源分開呈現，不把同一資料的兩種來源相加       |
 | 通知點擊數 | Firebase／Analytics 可取得的 `Opens`／通知開啟事件；官方 `Opens` 僅涵蓋背景 notification message 的開啟，不等於所有 App 開啟、網址成功載入或任何轉化 |
 
 `Received` 與 `Impressions` 僅適用 Android；Firebase Console 報表可能因批次處理延遲最多 24 小時，BigQuery 匯入也有自己的批次延遲。數字須標示實際計數單位、來源、平台、資料涵蓋限制與統計截止時間；訊息次數或 App 安裝實例數都不得標成不重複的自然人人數。未啟用、尚未匯入、不支援或不足以提供的資料標為「無資料」並附原因，不補成 `0`。沒有觀測到不代表沒送達；不承諾即時、完整或兩平台對稱的報表。
