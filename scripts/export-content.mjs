@@ -15,14 +15,14 @@ function instant(value) {
       /^\d{4}-\d\d-\d\dT([01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|[+-]([01]\d|2[0-3]):[0-5]\d)$/.test(
         value,
       ),
-    "時間必須包含時區",
+    "Timestamp must include a timezone.",
   );
   const time = Date.parse(value);
-  assert(Number.isFinite(time), "時間不合法");
+  assert(Number.isFinite(time), "Invalid timestamp.");
   const day = value.slice(0, 10);
   assert(
     new Date(`${day}T00:00:00Z`).toISOString().slice(0, 10) === day,
-    "日期不存在",
+    "Invalid calendar date.",
   );
   return time;
 }
@@ -35,7 +35,7 @@ function cell(value) {
 }
 
 export async function exportContent({ input, event, output, cutoff }) {
-  assert(typeof event === "string" && id.test(event), "活動 ID 不合法");
+  assert(typeof event === "string" && id.test(event), "Invalid event ID.");
   const cutoffTime = instant(cutoff);
   const exportedAt = new Date().toISOString();
   const records = [];
@@ -46,40 +46,43 @@ export async function exportContent({ input, event, output, cutoff }) {
       queries.length === 1 &&
       queries[0]?.success === true &&
       Array.isArray(queries[0].results),
-    "輸入必須是單一成功 D1 查詢的 Wrangler JSON",
+    "Input must be Wrangler JSON from a single successful D1 query.",
   );
   const sourceRows = queries[0].results;
   for (const row of sourceRows) {
     assert(
       row?.source_count === sourceRows.length,
-      "D1 來源筆數不符，請重新下載完整查詢結果",
+      "D1 source row count mismatch. Download the complete query results again.",
     );
-    assert(typeof row.content_json === "string", "缺少 D1 內容紀錄");
+    assert(typeof row.content_json === "string", "Missing D1 content record.");
     const record = JSON.parse(row.content_json);
     assert(
       record &&
         row.event_id === record.event_id &&
         row.push_id === record.push_id &&
         row.created_at === record.created_at,
-      "D1 索引欄位與內容紀錄不符",
+      "D1 index fields do not match the content record.",
     );
-    assert(record.event_id === event, "D1 查詢包含其他活動");
+    assert(record.event_id === event, "D1 query contains another event.");
     assert(
       record.version === 1 &&
         typeof record.push_id === "string" &&
         uuid.test(record.push_id),
-      "不支援的內容紀錄",
+      "Unsupported content record.",
     );
     const createdAt = instant(record.created_at);
     assert(
       record.created_at === new Date(createdAt).toISOString(),
-      "D1 建立時間必須是含毫秒的標準 UTC 格式",
+      "D1 creation timestamp must use canonical UTC format with milliseconds.",
     );
     assert(
       instant(record.expires_at) - createdAt === 3_600_000,
-      "訊息期限不合法",
+      "Invalid message expiry.",
     );
-    assert(typeof record.title === "string" && record.title.trim(), "缺少標題");
+    assert(
+      typeof record.title === "string" && record.title.trim(),
+      "Missing title.",
+    );
     assert(
       Array.isArray(record.roles) &&
         record.roles.length >= 1 &&
@@ -88,7 +91,7 @@ export async function exportContent({ input, event, output, cutoff }) {
         record.roles.every(
           (role) => typeof role === "string" && id.test(role) && role !== "all",
         ),
-      "角色資料不合法",
+      "Invalid roles.",
     );
     assert(
       record.contents &&
@@ -99,21 +102,30 @@ export async function exportContent({ input, event, output, cutoff }) {
             [...record.contents[locale]].length >= 1 &&
             [...record.contents[locale]].length <= 1024,
         ),
-      "缺少或無效的英文或正體中文內容",
+      "Missing or invalid English or Traditional Chinese content.",
     );
     assert(
       record.uri === undefined ||
         (typeof record.uri === "string" &&
           record.uri.startsWith("https://") &&
           new URL(record.uri).protocol === "https:"),
-      "URI 不合法",
+      "Invalid URI.",
     );
-    assert(createdAt <= cutoffTime, "D1 查詢包含截止時間後的內容");
-    assert(!seen.has(record.push_id), "重複的 push_id，請檢查來源查詢");
+    assert(
+      createdAt <= cutoffTime,
+      "D1 query contains content after the cutoff time.",
+    );
+    assert(
+      !seen.has(record.push_id),
+      "Duplicate push_id. Check the source query.",
+    );
     seen.add(record.push_id);
     records.push(record);
   }
-  assert(records.length > 0, "此活動在截止時間內沒有內容紀錄");
+  assert(
+    records.length > 0,
+    "No content records for this event at or before the cutoff time.",
+  );
   records.sort(
     (a, b) =>
       Date.parse(a.created_at) - Date.parse(b.created_at) ||
@@ -202,7 +214,7 @@ if (
     });
     assert(
       values.input && values.event && values.output && values.cutoff,
-      "用法：npm run export:content -- --input D1查詢.json --event EVENT_ID --output 新目錄 --cutoff RFC3339時間",
+      "Usage: npm run export:content -- --input d1-query.json --event EVENT_ID --output new-directory --cutoff RFC3339_TIMESTAMP",
     );
     console.log(JSON.stringify(await exportContent(values)));
   } catch (error) {

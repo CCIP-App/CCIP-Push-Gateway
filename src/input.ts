@@ -10,7 +10,7 @@ function invalid(): never {
   throw new GatewayError(
     400,
     "INVALID_REQUEST",
-    "請檢查角色、英文及正體中文內容及 HTTPS 連結。",
+    "Check the roles, English and Traditional Chinese content, and HTTPS URL.",
   );
 }
 

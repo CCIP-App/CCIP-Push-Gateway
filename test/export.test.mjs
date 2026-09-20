@@ -59,7 +59,7 @@ test("rejects out-of-scope rows and exports content without a dispatch result or
     event_id: "EVENT_B",
     title: "DO_NOT_EXPORT",
   });
-  await assert.rejects(exportContent(options), /其他活動/);
+  await assert.rejects(exportContent(options), /another event/);
   await options.save("other-event", undefined);
   await options.save("future", {
     ...record,
@@ -67,7 +67,7 @@ test("rejects out-of-scope rows and exports content without a dispatch result or
     created_at: "2027-03-15T10:00:00.000Z",
     expires_at: "2027-03-15T11:00:00.000Z",
   });
-  await assert.rejects(exportContent(options), /截止時間/);
+  await assert.rejects(exportContent(options), /cutoff time/);
   await options.save("future", undefined);
   const manifest = await exportContent(options);
   assert.equal(manifest.push_count, 1);
@@ -110,7 +110,7 @@ test("neutralizes spreadsheet formulas in free text without corrupting the JSON 
 test("rejects duplicate push IDs and malformed content before creating output", async (t) => {
   const options = await fixture(t);
   await options.save("duplicate", record);
-  await assert.rejects(exportContent(options), /重複/);
+  await assert.rejects(exportContent(options), /Duplicate push_id/);
   await options.save("duplicate", undefined);
   for (const contents of [
     { en: "missing Chinese" },
@@ -118,7 +118,10 @@ test("rejects duplicate push IDs and malformed content before creating output", 
     { ...record.contents, fr: "unsupported locale" },
   ]) {
     await options.save("first", { ...record, contents });
-    await assert.rejects(exportContent(options), /英文或正體中文/);
+    await assert.rejects(
+      exportContent(options),
+      /English or Traditional Chinese/,
+    );
   }
   await assert.rejects(readFile(join(options.output, "content.csv")), {
     code: "ENOENT",
@@ -158,15 +161,15 @@ test("rejects failed or incomplete D1 downloads and mismatched row identities", 
 test("refuses an empty scope, timezone-free cutoff and existing output directory", async (t) => {
   const options = await fixture(t);
   await options.save("first", undefined);
-  await assert.rejects(exportContent(options), /沒有內容/);
+  await assert.rejects(exportContent(options), /No content records/);
   await options.save("first", record);
   await assert.rejects(
     exportContent({ ...options, cutoff: "2027-03-14" }),
-    /時區/,
+    /timezone/,
   );
   await assert.rejects(
     exportContent({ ...options, cutoff: "2027-02-30T10:00:00Z" }),
-    /日期不存在/,
+    /Invalid calendar date/,
   );
   await exportContent(options);
   await assert.rejects(exportContent(options), { code: "EEXIST" });
@@ -279,6 +282,6 @@ test("exports native local D1 query output with event, cutoff and completeness c
   );
   await assert.rejects(
     exportContent({ ...options, output: join(options.root, "truncated") }),
-    /來源筆數/,
+    /source row count/,
   );
 });

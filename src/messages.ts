@@ -68,7 +68,7 @@ export async function sendMessage(
     throw new GatewayError(
       403,
       "EVENT_PUBLISHING_EXPIRED",
-      "活動結束已滿三十天，停止發布推播。",
+      "Push publishing is closed because the event ended at least 30 days ago.",
     );
   const input = await readInput(request);
   const account = await prepareAccount(env.FIREBASE_SERVICE_ACCOUNT);
@@ -100,7 +100,7 @@ export async function sendMessage(
       throw new GatewayError(
         400,
         "PAYLOAD_TOO_LARGE",
-        "至少一個語系的 FCM payload 超過 2,048 bytes。",
+        "The FCM payload for at least one locale exceeds 2,048 bytes.",
       );
     }
   }
@@ -108,12 +108,16 @@ export async function sendMessage(
     throw new GatewayError(
       403,
       "EVENT_PUBLISHING_EXPIRED",
-      "活動已停止發布推播。",
+      "Push publishing for this event is closed.",
     );
   if (
     !(await env.EVENT_RATE_LIMITER.limit({ key: context.event_id })).success
   ) {
-    throw new GatewayError(429, "RATE_LIMITED", "此活動的發送頻率超過限制。");
+    throw new GatewayError(
+      429,
+      "RATE_LIMITED",
+      "The sending rate limit for this event has been exceeded.",
+    );
   }
   try {
     const saved = await env.PUSH_RECORDS.prepare(
@@ -132,7 +136,7 @@ export async function sendMessage(
     throw new GatewayError(
       500,
       "CONTENT_RECORD_FAILED",
-      "無法保存推播內容，尚未開始派送。",
+      "Could not save the push content. Dispatch has not started.",
     );
   }
 
@@ -255,7 +259,7 @@ export async function sendMessage(
     throw new GatewayError(
       403,
       "EVENT_PUBLISHING_EXPIRED",
-      "活動已停止發布推播，尚未開始派送。",
+      "Push publishing for this event is closed. Dispatch has not started.",
     );
   return result;
 }

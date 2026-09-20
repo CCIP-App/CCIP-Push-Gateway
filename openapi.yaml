@@ -181,7 +181,7 @@ paths:
                 publishingExpired:
                   value:
                     code: EVENT_PUBLISHING_EXPIRED
-                    message: 活動結束已滿三十天，停止發布推播。
+                    message: Push publishing is closed because the event ended at least 30 days ago.
         "429":
           description: 此活動的發送頻率超過限制
           headers:
@@ -444,3 +444,4 @@ components:
           type: string
         message:
           type: string
+          description: 供人閱讀的英文錯誤訊息；呼叫端應依 code 判讀錯誤。

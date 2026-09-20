@@ -85,7 +85,7 @@ export async function authenticate(
   throw new GatewayError(
     401,
     "INVALID_KEY",
-    "Gateway key 缺少、無效或已撤銷。",
+    "The Gateway key is missing, invalid, or revoked.",
   );
 }
 

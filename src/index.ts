@@ -13,7 +13,7 @@ export default {
     try {
       const url = new URL(request.url);
       if (!["/v1/context", "/v1/messages"].includes(url.pathname)) {
-        throw new GatewayError(404, "NOT_FOUND", "找不到此 API。");
+        throw new GatewayError(404, "NOT_FOUND", "API endpoint not found.");
       }
       const method = url.pathname === "/v1/context" ? "GET" : "POST";
       const registry = readRegistry(env.EVENT_CONFIG_JSON);
@@ -46,7 +46,7 @@ export default {
           throw new GatewayError(
             403,
             "ORIGIN_NOT_ALLOWED",
-            "不允許此 preflight。",
+            "This preflight request is not allowed.",
           );
         }
         allowCors();
@@ -68,7 +68,7 @@ export default {
         throw new GatewayError(
           403,
           "ORIGIN_NOT_ALLOWED",
-          "不允許此 Admin 來源。",
+          "This Admin origin is not allowed.",
         );
       }
       allowCors();
@@ -77,14 +77,14 @@ export default {
         throw new GatewayError(
           405,
           "METHOD_NOT_ALLOWED",
-          "不允許此 HTTP 方法。",
+          "This HTTP method is not allowed.",
         );
       }
       if (url.search)
         throw new GatewayError(
           400,
           "INVALID_REQUEST",
-          "此 API 不接受 query parameters。",
+          "This API does not accept query parameters.",
         );
       const context = eventContext(registry, key, Date.now());
       if (method === "GET") return json(context, 200);
@@ -97,7 +97,10 @@ export default {
       }
       console.error({ code: "INTERNAL_ERROR" });
       return json(
-        { code: "INTERNAL_ERROR", message: "Gateway 無法完成此操作。" },
+        {
+          code: "INTERNAL_ERROR",
+          message: "The Gateway could not complete this operation.",
+        },
         500,
       );
     }

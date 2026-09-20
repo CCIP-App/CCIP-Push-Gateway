@@ -87,6 +87,6 @@ export function configurationError(): never {
   throw new GatewayError(
     500,
     "CONFIGURATION_ERROR",
-    "Gateway 中央設定不合法或無法使用。",
+    "The central Gateway configuration is invalid or unavailable.",
   );
 }
