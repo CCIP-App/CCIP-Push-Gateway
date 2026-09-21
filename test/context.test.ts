@@ -189,4 +189,65 @@ describe("event context and browser boundary", () => {
       true,
     );
   });
+  it.each([
+    ["invalid JSON", "valid JSON"],
+    ["root", "must be an object"],
+    ["events", "events must be an object"],
+    ["keys", "keys must be an array"],
+    ["entry", "keys[] must be an object"],
+    ["sha256", "64-character lowercase hexadecimal"],
+    ["duplicate", "duplicate digests"],
+    ["event_id", "1-64 letters"],
+    ["allowed_origins", "without paths or trailing slashes"],
+    ["state", "active or revoked"],
+    ["missing event", "authenticated key event_id"],
+    ["organizer_name", "nonblank"],
+    ["event_ends_at", "including seconds and timezone"],
+  ])(
+    "explains %s configuration errors without exposing values",
+    async (kind, reason) => {
+      const env = await environment();
+      const config = JSON.parse(env.EVENT_CONFIG_JSON);
+      const digest = config.keys[0].sha256;
+      const secret = "private-config-value";
+      if (kind === "root") env.EVENT_CONFIG_JSON = "null";
+      else if (kind === "invalid JSON") env.EVENT_CONFIG_JSON = secret;
+      else {
+        if (kind === "events") config.events = secret;
+        else if (kind === "keys") config.keys = secret;
+        else if (kind === "entry") config.keys[0] = secret;
+        else if (kind === "duplicate") config.keys.push(config.keys[0]);
+        else if (kind === "missing event") delete config.events.A;
+        else if (kind === "organizer_name")
+          config.events.A.organizer_name = "\n" + secret;
+        else if (kind === "event_ends_at")
+          config.events.A.event_ends_at = secret;
+        else
+          config.keys[0][kind] =
+            kind === "allowed_origins"
+              ? [originA + "/"]
+              : kind === "event_id"
+                ? "invalid/" + secret
+                : secret;
+        env.EVENT_CONFIG_JSON = JSON.stringify(config);
+      }
+      const response = await worker.fetch(request(), env);
+      expect(response.status).toBe(500);
+      const body = (await response.json()) as { code: string; message: string };
+      expect(Object.keys(body).sort()).toEqual(["code", "message"]);
+      expect(body.code).toBe("CONFIGURATION_ERROR");
+      expect(body.message).toContain("EVENT_CONFIG_JSON");
+      expect(body.message).toContain(reason);
+      for (const value of [
+        secret,
+        digest,
+        keyA,
+        keyB,
+        originA,
+        originB,
+        "活動 B",
+      ])
+        expect(body.message).not.toContain(value);
+    },
+  );
 });

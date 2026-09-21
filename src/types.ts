@@ -83,10 +83,8 @@ export function isObject(value: unknown): value is Record<string, unknown> {
 
 export const ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 
-export function configurationError(): never {
-  throw new GatewayError(
-    500,
-    "CONFIGURATION_ERROR",
-    "The central Gateway configuration is invalid or unavailable.",
-  );
+export function configurationError(
+  message = "The central Gateway configuration is invalid or unavailable.",
+): never {
+  throw new GatewayError(500, "CONFIGURATION_ERROR", message);
 }

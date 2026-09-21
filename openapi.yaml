@@ -83,7 +83,10 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "500":
-          description: 中央活動設定缺少、不合法或無法讀取；不得改用 Admin 本機資料授權發送。
+          description: |
+            中央活動設定缺少、不合法或無法讀取；不得改用 Admin 本機資料授權發送。
+            CONFIGURATION_ERROR 的 message 指出第一個無效的 EVENT_CONFIG_JSON 欄位及格式要求；不回傳設定值、key digest 或其他活動資料。
+            registry 格式錯誤可能在驗證與 CORS 判定前回傳，瀏覽器未必能讀取本文。
           content:
             application/json:
               schema:
